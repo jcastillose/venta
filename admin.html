@@ -20,19 +20,38 @@
 
 <main id="view"><p class="spinner">Cargando…</p></main>
 
-<dialog id="dlg-invitar">
-  <form class="sheet" id="form-invitar">
-    <div class="title">Invitar a una persona</div>
-    <p>Le enviamos un enlace de acceso a su correo. Podrá publicar y editar todos los productos del equipo.</p>
+<dialog id="dlg-cuenta">
+  <form class="sheet" id="form-cuenta">
+    <div class="title" id="cuenta-titulo">Nueva cuenta</div>
+    <p id="cuenta-bajada">La persona podrá publicar y editar todos los productos del equipo.</p>
+    <input type="hidden" name="id">
     <label class="field">Nombre<input name="name" required placeholder="Ej. Rocío Soto"></label>
     <label class="field">Correo<input name="email" type="email" required placeholder="nombre@correo.cl"></label>
     <label class="field">Rol<select name="role">
       <option value="editor">Editor · productos y conversaciones</option>
-      <option value="admin">Administradora · también cuentas y cobros</option>
+      <option value="admin">Administrador · también cuentas y cobros</option>
     </select></label>
+    <div id="cuenta-modo" class="stack" style="gap:10px">
+      <label class="choice"><span class="head"><input type="radio" name="modo" value="password" checked><span class="mark"></span>
+        <span class="stack"><b>Con contraseña inicial</b><span class="desc">Queda lista para entrar hoy. Tú le comunicas la contraseña y la cambia en Mi cuenta.</span></span></span></label>
+      <label class="choice"><span class="head"><input type="radio" name="modo" value="invitar"><span class="mark"></span>
+        <span class="stack"><b>Invitación por correo</b><span class="desc">Recibe un enlace para entrar. Usa el límite de correos de Supabase.</span></span></span></label>
+    </div>
+    <label class="field" id="cuenta-pass-wrap">Contraseña inicial<input name="password" type="text" minlength="8" autocomplete="off" placeholder="Mínimo 8 caracteres"><span class="hint" id="cuenta-pass-hint">Puedes dejarla vacía para no cambiarla.</span></label>
     <div class="actions">
       <button type="button" class="btn btn-secondary" data-close>Cancelar</button>
-      <button type="submit" class="btn btn-primary">Enviar invitación</button>
+      <button type="submit" class="btn btn-primary" id="cuenta-cta">Crear cuenta</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-eliminar">
+  <form class="sheet" method="dialog" id="form-eliminar">
+    <div class="title">Eliminar cuenta</div>
+    <p id="eliminar-texto"></p>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" data-close>Cancelar</button>
+      <button type="submit" class="btn btn-primary" style="background:var(--rojo)">Eliminar</button>
     </div>
   </form>
 </dialog>
@@ -160,7 +179,13 @@ function recuperar() {
   };
 }
 
-const salir = async () => { await sb.auth.signOut(); location.reload(); };
+const salir = async () => {
+  try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { console.warn(e); }
+  // Respaldo: borrar cualquier sesión que haya quedado guardada.
+  Object.keys(localStorage).filter((k) => k.startsWith('sb-') && k.endsWith('-auth-token')).forEach((k) => localStorage.removeItem(k));
+  me = null;
+  location.replace('/admin.html');
+};
 
 function errorAcceso(email, error) {
   view.innerHTML = `<section class="center"><div class="panel" style="max-width:520px;padding:28px">
@@ -175,14 +200,14 @@ function errorAcceso(email, error) {
 function sinCuenta(email) {
   view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
     <h3>Tu correo no tiene cuenta en el equipo</h3>
-    <p class="lead">${esc(email)} entró correctamente, pero no hay una cuenta asociada. Pídele a una administradora que te invite.</p>
+    <p class="lead">${esc(email)} entró correctamente, pero no hay una cuenta asociada. Pídele a un administrador que te invite.</p>
     <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
   document.getElementById('salir').onclick = salir;
 }
 function suspendida(m) {
   view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
     <h3>Cuenta ${esc(m.status)}</h3>
-    <p class="lead">Tu acceso está ${esc(m.status)}. Una administradora puede reactivarlo desde la pantalla Equipo.</p>
+    <p class="lead">Tu acceso está ${esc(m.status)}. Un administrador puede reactivarlo desde la pantalla Equipo.</p>
     <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
   document.getElementById('salir').onclick = salir;
 }
@@ -200,7 +225,7 @@ function navegar() {
 
   const mine = document.getElementById('nav-me');
   mine.classList.remove('hide');
-  mine.innerHTML = `<span style="font-size:12.5px">${esc(me.name)} · ${me.role === 'admin' ? 'Administradora' : 'Editor'}</span>
+  mine.innerHTML = `<span style="font-size:12.5px">${esc(me.name)} · ${me.role === 'admin' ? 'Administrador' : 'Editor'}</span>
     <button class="btn btn-secondary" id="btn-salir" style="padding:7px 12px;font-size:12.5px">Salir</button>`;
   document.getElementById('btn-salir').onclick = salir;
 }
@@ -244,7 +269,7 @@ function vProductos() {
   view.innerHTML = `
     <section class="section-head">
       <div class="stack">
-        <span class="kicker">${esc(me.name)} · ${me.role === 'admin' ? 'Administradora' : 'Editor'}</span>
+        <span class="kicker">${esc(me.name)} · ${me.role === 'admin' ? 'Administrador' : 'Editor'}</span>
         <h2>Productos del equipo</h2>
         <p class="lead">Cualquier cuenta activa puede editar y cambiar el estado de todos los productos.</p>
       </div>
@@ -580,7 +605,7 @@ function vCobros() {
 
     <section style="padding:44px 0 0" class="stack">
       <h3>Datos de cobro</h3>
-      <p class="lead" style="max-width:60ch;margin-bottom:8px">Estos datos son los que ve quien va a pagar. ${me.role === 'admin' ? 'Como administradora puedes editarlos aquí mismo.' : 'Solo una administradora puede editarlos.'}</p>
+      <p class="lead" style="max-width:60ch;margin-bottom:8px">Estos datos son los que ve quien va a pagar. ${me.role === 'admin' ? 'Como administrador puedes editarlos aquí mismo.' : 'Solo un administrador puede editarlos.'}</p>
     </section>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px">
       ${['prex', 'mercadopago', 'transferencia'].map((k) => {
@@ -637,9 +662,9 @@ function vEquipo() {
       <div class="stack">
         <span class="kicker">${activas} cuentas activas · ${invitadas} invitaciones pendientes</span>
         <h2>Equipo</h2>
-        <p class="lead" style="max-width:62ch">Cada cuenta entra con su propio correo y enlace de acceso. <strong>Editor</strong> publica y edita cualquier producto, responde conversaciones y confirma pagos. <strong>Administradora</strong> hace lo mismo y además gestiona cuentas y datos de cobro.</p>
+        <p class="lead" style="max-width:62ch">Cada cuenta entra con su propio correo, con contraseña o enlace. <strong>Editor</strong> publica y edita cualquier producto, responde conversaciones y confirma pagos. <strong>Administrador</strong> hace lo mismo y además crea, edita y elimina cuentas y gestiona los datos de cobro.</p>
       </div>
-      ${admin ? `<button class="btn btn-primary" id="invitar">${ICON.plus}Invitar persona</button>` : ''}
+      ${admin ? `<button class="btn btn-primary" id="nueva-cuenta">${ICON.plus}Nueva cuenta</button>` : ''}
     </section>
     <div class="tablewrap"><table>
       <thead><tr><th>Persona</th><th>Rol</th><th>Estado</th><th>Publicados</th><th></th></tr></thead>
@@ -649,39 +674,69 @@ function vEquipo() {
         return `<tr>
           <td><div class="stack"><strong>${esc(u.name)}${u.id === me.id ? ' <span style="font-size:11px;color:var(--accent)">tú</span>' : ''}</strong>
             <span class="sub">${esc(u.email)}</span></div></td>
-          <td>${gest ? `<select data-role="${u.id}">
-              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administradora</option>
-              <option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option></select>`
-            : `<span class="sub">${u.role === 'admin' ? 'Administradora' : 'Editor'}</span>`}</td>
+          <td><span class="sub">${u.role === 'admin' ? 'Administrador' : 'Editor'}</span></td>
           <td><div class="stack">
             <span class="state"><span class="dot" style="background:${u.status === 'activo' ? 'var(--verde)' : u.status === 'invitado' ? 'var(--ambar)' : 'var(--gris)'}"></span>${
               { activo: 'Activo', invitado: 'Invitación enviada', suspendido: 'Suspendido' }[u.status] || esc(u.status)}</span>
             <span class="sub" style="color:var(--faint)">${u.last_seen ? fecha(u.last_seen) : 'sin ingresar'}</span></div></td>
           <td class="sub">${pubs} ${pubs === 1 ? 'producto' : 'productos'}</td>
           <td class="right">${gest ? `<div style="display:inline-flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn btn-secondary" data-editar="${u.id}">${ICON.edit}Editar</button>
             <button class="btn btn-secondary" data-estado="${u.id}" data-to="${u.status === 'suspendido' ? 'activo' : 'suspendido'}">${u.status === 'suspendido' ? 'Reactivar' : 'Suspender'}</button>
-            ${pubs === 0 ? `<button class="btn btn-secondary btn-danger" data-quitar="${u.id}" aria-label="Quitar acceso" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button>` : ''}
+            <button class="btn btn-secondary btn-danger" data-eliminar="${u.id}" aria-label="Eliminar cuenta" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button>
           </div>` : ''}</td>
         </tr>`; }).join('')}</tbody>
     </table></div>
-    ${admin ? '' : '<p class="lead" style="margin-top:16px">Tu cuenta es de editor: puedes ver el equipo, pero solo una administradora invita, cambia roles o suspende accesos.</p>'}`;
+    ${admin ? '' : '<p class="lead" style="margin-top:16px">Tu cuenta es de editor: puedes ver el equipo, pero solo un administrador crea, edita o elimina cuentas.</p>'}`;
 
-  document.getElementById('invitar')?.addEventListener('click', () => document.getElementById('dlg-invitar').showModal());
-  view.querySelectorAll('[data-role]').forEach((s) => s.onchange = async () => {
-    const { error } = await sb.from('members').update({ role: s.value }).eq('id', s.dataset.role);
-    if (error) return fail(error);
-    toast('Rol actualizado'); recargar();
-  });
+  document.getElementById('nueva-cuenta')?.addEventListener('click', () => abrirCuenta(null));
+  view.querySelectorAll('[data-editar]').forEach((b) => b.onclick = () => abrirCuenta(equipo.find((u) => u.id === b.dataset.editar)));
   view.querySelectorAll('[data-estado]').forEach((b) => b.onclick = async () => {
-    const { error } = await sb.from('members').update({ status: b.dataset.to }).eq('id', b.dataset.estado);
-    if (error) return fail(error);
+    const r = await llamarCuentas({ accion: 'editar', id: b.dataset.estado, status: b.dataset.to });
+    if (!r) return;
     toast(b.dataset.to === 'activo' ? 'Cuenta reactivada' : 'Cuenta suspendida'); recargar();
   });
-  view.querySelectorAll('[data-quitar]').forEach((b) => b.onclick = async () => {
-    const { error } = await sb.from('members').delete().eq('id', b.dataset.quitar);
-    if (error) return fail(error);
-    toast('Acceso eliminado'); recargar();
+  view.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => {
+    const u = equipo.find((x) => x.id === b.dataset.eliminar);
+    const pubs = productos.filter((p) => p.created_by === u.id).length;
+    document.getElementById('eliminar-texto').innerHTML =
+      `Se eliminará el acceso de <strong>${esc(u.name)}</strong> (${esc(u.email)}). ${pubs ? `Sus ${pubs} ${pubs === 1 ? 'producto pasará' : 'productos pasarán'} a tu nombre; no se pierde nada.` : 'No tiene productos publicados.'}`;
+    const dlg = document.getElementById('dlg-eliminar');
+    document.getElementById('form-eliminar').onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await llamarCuentas({ accion: 'eliminar', id: u.id });
+      dlg.close();
+      if (!r) return;
+      toast('Cuenta eliminada'); recargar();
+    };
+    dlg.showModal();
   });
+}
+
+/* Diálogo de crear / editar cuenta. */
+function abrirCuenta(u) {
+  const dlg = document.getElementById('dlg-cuenta');
+  const f = document.getElementById('form-cuenta');
+  f.reset();
+  f.id.value = u?.id || '';
+  f.name.value = u?.name || '';
+  f.email.value = u?.email || '';
+  f.role.value = u?.role || 'editor';
+  document.getElementById('cuenta-titulo').textContent = u ? 'Editar cuenta' : 'Nueva cuenta';
+  document.getElementById('cuenta-bajada').textContent = u
+    ? 'Cambia nombre, correo o rol. Si escribes una contraseña, reemplaza la actual.'
+    : 'La persona podrá publicar y editar todos los productos del equipo.';
+  document.getElementById('cuenta-modo').classList.toggle('hide', !!u);
+  document.getElementById('cuenta-pass-hint').classList.toggle('hide', !u);
+  document.getElementById('cuenta-cta').textContent = u ? 'Guardar cambios' : 'Crear cuenta';
+  f.password.required = !u;
+  f.querySelectorAll('[name=modo]').forEach((r) => r.onchange = () => {
+    const inv = f.modo.value === 'invitar';
+    document.getElementById('cuenta-pass-wrap').classList.toggle('hide', inv);
+    f.password.required = !inv;
+  });
+  document.getElementById('cuenta-pass-wrap').classList.remove('hide');
+  dlg.showModal();
 }
 
 /* ── mi cuenta ──────────────────────────────────────────────────── */
@@ -713,7 +768,7 @@ async function vCuenta() {
           <span class="sub" style="font-size:12.5px;color:var(--muted)">Es el nombre que ven los interesados en el catálogo y en el chat.</span>
         </div>
         <label class="field">Nombre<input name="name" required value="${esc(me.name)}"></label>
-        <label class="field">Rol<input value="${me.role === 'admin' ? 'Administradora' : 'Editor'}" readonly style="background:#F6F5F1"></label>
+        <label class="field">Rol<input value="${me.role === 'admin' ? 'Administrador' : 'Editor'}" readonly style="background:#F6F5F1"></label>
         <div><button class="btn btn-primary">Guardar nombre</button></div>
       </form>
     </div>`;
@@ -750,27 +805,46 @@ async function vCuenta() {
   };
 }
 
-/* ── invitación ─────────────────────────────────────────────────── */
-const dlgInv = document.getElementById('dlg-invitar');
-dlgInv.querySelector('[data-close]').onclick = () => dlgInv.close();
-document.getElementById('form-invitar').onsubmit = async (e) => {
+/* ── cuentas: llamada a la function con la sesión del administrador ── */
+async function llamarCuentas(body) {
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch('/.netlify/functions/cuentas', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify(body),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || `Error ${res.status}`);
+    return out;
+  } catch (err) {
+    if (/Failed to fetch|404/.test(err.message)) {
+      fail(new Error('La función de cuentas no responde. Revisa que SUPABASE_SERVICE_ROLE_KEY esté configurada en Netlify y el sitio redesplegado.'));
+    } else fail(err);
+    return null;
+  }
+}
+
+const dlgCuenta = document.getElementById('dlg-cuenta');
+const dlgEliminar = document.getElementById('dlg-eliminar');
+dlgCuenta.querySelector('[data-close]').onclick = () => dlgCuenta.close();
+dlgEliminar.querySelector('[data-close]').onclick = () => dlgEliminar.close();
+
+document.getElementById('form-cuenta').onsubmit = async (e) => {
   e.preventDefault();
   const fd = Object.fromEntries(new FormData(e.target));
   const btn = e.target.querySelector('[type=submit]');
   btn.disabled = true;
-  const { data: { session } } = await sb.auth.getSession();
-  try {
-    const res = await fetch('/.netlify/functions/invitar-usuario', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },
-      body: JSON.stringify(fd),
-    });
-    const out = await res.json();
-    if (!res.ok) throw new Error(out.error || 'No se pudo invitar');
-    toast('Invitación enviada a ' + fd.email);
-    dlgInv.close(); e.target.reset(); recargar();
-  } catch (err) { fail(err); }
+  const editando = !!fd.id;
+  const body = editando
+    ? { accion: 'editar', id: fd.id, name: fd.name, email: fd.email, role: fd.role, password: fd.password || undefined }
+    : { accion: 'crear', name: fd.name, email: fd.email, role: fd.role, modo: fd.modo, password: fd.password };
+  const r = await llamarCuentas(body);
   btn.disabled = false;
+  if (!r) return;
+  dlgCuenta.close();
+  toast(editando ? 'Cuenta actualizada' : r.modo === 'invitar' ? 'Invitación enviada a ' + fd.email : 'Cuenta creada. Comunícale la contraseña a ' + fd.name);
+  recargar();
 };
 
 let recuperando = false;
