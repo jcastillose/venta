@@ -50,7 +50,8 @@ async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return login();
   const { data, error } = await sb.from('members').select('*').eq('id', session.user.id).single();
-  if (error || !data) return sinCuenta(session.user.email);
+  if (error && error.code !== 'PGRST116') return errorAcceso(session.user.email, error);
+  if (!data) return sinCuenta(session.user.email);
   if (data.status !== 'activo') return suspendida(data);
   me = data;
   sb.from('members').update({ last_seen: new Date().toISOString() }).eq('id', me.id);
@@ -160,6 +161,16 @@ function recuperar() {
 }
 
 const salir = async () => { await sb.auth.signOut(); location.reload(); };
+
+function errorAcceso(email, error) {
+  view.innerHTML = `<section class="center"><div class="panel" style="max-width:520px;padding:28px">
+    <h3>No pudimos leer tu cuenta</h3>
+    <p class="lead">${esc(email)} inició sesión, pero la consulta a la base de datos falló.</p>
+    <div class="note note-warn" style="font-size:13px"><strong>${esc(error.code || 'error')}</strong> — ${esc(error.message || '')}${error.hint ? '<br>' + esc(error.hint) : ''}</div>
+    <p class="lead" style="font-size:12.5px">Si dice <em>permission denied</em>, falta ejecutar los <code>grant</code> del esquema en Supabase.</p>
+    <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
+  document.getElementById('salir').onclick = salir;
+}
 
 function sinCuenta(email) {
   view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
