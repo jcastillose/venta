@@ -27,7 +27,9 @@ Ejecutar en el SQL Editor de Supabase, en orden:
 1. `supabase/schema.sql`
 2. `supabase/002-ofertas.sql`
 3. `supabase/003-ajustes.sql`
-4. `supabase/bootstrap-admin.sql` (primera cuenta de administrador; editar correo, nombre y contraseña antes)
+4. `supabase/004-categorias.sql`
+5. `supabase/005-titulo.sql`
+6. `supabase/bootstrap-admin.sql` (primera cuenta de administrador; editar correo, nombre y contraseña antes)
 
 Todos son re-ejecutables.
 

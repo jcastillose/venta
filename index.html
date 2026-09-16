@@ -40,7 +40,11 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, CATEGORIAS, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, misTokens } from '/src/supabase.js';
+import { sb, clp, esc, cargarCategorias, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, misTokens, aplicarTitulo } from '/src/supabase.js';
+
+aplicarTitulo('');
+
+let CATEGORIAS = [];
 
 const grid = document.getElementById('grid');
 const filtros = document.getElementById('filtros');
@@ -89,9 +93,9 @@ function pintar() {
       </div>
       <div class="stack">
         <div class="titles"><span>${esc(p.title)}</span><span class="price">${clp(p.price_clp)}</span></div>
-        <div class="meta">${esc(p.category)} · ${esc(p.published_by || '')}</div>
+        <div class="meta">${esc(p.category)}</div>
         ${ofertasVisibles && p.top_offer_clp ? `<div class="meta" style="margin-top:4px">Oferta más alta <strong style="color:var(--ink)">${clp(p.top_offer_clp)}</strong> · ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</div>` : ''}
-        <div class="meta" style="color:var(--accent);font-weight:600;margin-top:4px">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}</div>
+        <div class="meta" style="color:var(--accent);font-weight:600;margin-top:4px;line-height:1.4">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}</div>
       </div>
     </a>`;
   }).join('');
@@ -99,6 +103,9 @@ function pintar() {
 
 async function cargar() {
   grid.innerHTML = '<p class="spinner">Cargando catálogo…</p>';
+  CATEGORIAS = await cargarCategorias();
+  if (cat !== 'Todo' && !CATEGORIAS.includes(cat)) cat = 'Todo';
+  pintarFiltros();
   const { data, error } = await sb.from('catalog').select('*').order('created_at', { ascending: false });
   if (error) { grid.innerHTML = ''; return fail(error); }
   const { data: st } = await sb.from('site_settings').select('key,value');
@@ -114,19 +121,18 @@ async function cargar() {
     return { ...p, cover: f[0]?.storage_path, photo_count: f.length };
   });
 
-  const vendedores = new Set(items.map((p) => p.published_by)).size;
   document.getElementById('resumen').textContent =
-    `${items.length} productos · ${vendedores} ${vendedores === 1 ? 'vendedor' : 'vendedores'} · ${ofertasVisibles ? 'precio publicado, ofertas abiertas' : 'precio fijo'}, trato directo con quien vende`;
+    `${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${ofertasVisibles ? 'precio publicado, ofertas abiertas' : 'precio fijo'}, trato directo con quien vende`;
   pintar();
 }
 
-pintarFiltros();
 cargar();
 
 sb.channel('catalogo')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, cargar)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, cargar)
   .on('postgres_changes', { event: '*', schema: 'public', table: 'offers' }, cargar)
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, cargar)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, () => { cargar(); aplicarTitulo(''); })
   .subscribe();
 </script>
 </body>

@@ -50,7 +50,7 @@ h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .field input,.field select,.field textarea{min-height:42px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;font-weight:500;color:var(--ink)}
 .field textarea{min-height:0;line-height:1.5;resize:vertical}
 .field .hint{font-size:12px;font-weight:500;color:var(--faint)}
-.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:14px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:14px;align-items:start}
 .form{display:grid;gap:18px}
 
 .dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
@@ -72,6 +72,11 @@ h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .gallery{display:grid;gap:10px}
 .gallery .main{position:relative;aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--wash);display:grid;place-items:center}
 .gallery .main img{width:100%;height:100%;object-fit:cover}
+.gal-nav{position:absolute;bottom:12px;right:12px;display:flex;gap:6px;align-items:center}
+.gal-count{font-size:11px;font-weight:600;background:var(--bg);padding:6px 9px;border-radius:6px;color:var(--muted);font-variant-numeric:tabular-nums}
+.gal-nav button{width:36px;height:36px;border-radius:6px;border:0;background:var(--bg);cursor:pointer;display:grid;place-items:center;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.gal-nav button:hover{background:var(--surface)}
+.gal-nav svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.5}
 .gallery .strip{display:flex;gap:8px;flex-wrap:wrap}
 .gallery .strip button{width:64px;height:64px;border-radius:8px;border:2px solid transparent;background:var(--wash);cursor:pointer;padding:0;overflow:hidden}
 .gallery .strip button[aria-current]{border-color:var(--ink)}

@@ -37,7 +37,9 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, fecha, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, guardarToken, misTokens, ICON, METODOS } from '/src/supabase.js';
+import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo } from '/src/supabase.js';
+
+aplicarTitulo('Producto');
 
 const id = (location.pathname.match(/^\/p\/(.+)$/)?.[1]) || new URLSearchParams(location.search).get('id');
 const cont = document.getElementById('detalle');
@@ -56,7 +58,7 @@ async function cargar() {
   if (error || !p) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
   (st || []).forEach((r) => { ajustes[r.key] = r.value === true; });
   prod = p; fotos = f || []; metodos = (m || []).map((x) => METODOS[x.method] || x.method);
-  document.title = p.title + ' — Oferta de Muebles y Electrodomésticos';
+  document.title = p.title + ' — ' + (window.__tituloSitio || 'Oferta de Muebles y Electrodomésticos');
   pintar();
 }
 
@@ -77,6 +79,11 @@ function pintar() {
     <div class="gallery">
       <div class="main">
         ${foto ? `<img src="${foto}" alt="${esc(p.title)}">` : placeholderSVG(p.category)}
+        ${fotos.length > 1 ? `<div class="gal-nav">
+          <span class="gal-count">${idx + 1} / ${fotos.length}</span>
+          <button type="button" id="foto-prev" aria-label="Foto anterior"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+          <button type="button" id="foto-next" aria-label="Foto siguiente"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        </div>` : ''}
       </div>
       ${fotos.length > 1 ? `<div class="strip">${fotos.map((f, i) => {
         const u = fotoUrl(f.storage_path);
@@ -84,7 +91,7 @@ function pintar() {
       }).join('')}</div>` : ''}
     </div>
     <div style="display:grid;gap:18px;align-content:start;padding-top:6px">
-      <span class="kicker">${esc(p.category)} · ${esc(p.published_by || '')}</span>
+      <span class="kicker">${esc(p.category)}</span>
       <h2>${esc(p.title)}</h2>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <span class="price-lg" ${p.status === 'vendido' ? 'style="text-decoration:line-through"' : ''}>${clp(p.price_clp)}</span>
@@ -93,7 +100,7 @@ function pintar() {
       <p style="font-size:15px;line-height:1.65;max-width:52ch;margin:0;color:var(--ink-2)">${esc(p.description).replace(/\n/g, '<br>')}</p>
       <div class="specs">
         <div><span class="k">Retiro</span>${esc(p.lugar || '—')}</div>
-        <div><span class="k">Condición</span>${esc(p.condicion || '—')}</div>
+        <div><span class="k">Condición</span>${esc(condicionLabel(p.condicion))}</div>
         <div><span class="k">Publicado</span>${fecha(p.created_at)}</div>
         ${ajustes.ofertas_habilitadas && ajustes.ofertas_publicas ? `<div><span class="k">Oferta más alta</span>${p.top_offer_clp ? `<strong style="color:var(--accent)">${clp(p.top_offer_clp)}</strong> <span style="color:var(--muted)">· ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</span>` : '<span style="color:var(--muted)">Sin ofertas aún</span>'}</div>` : ''}
       </div>
@@ -102,6 +109,18 @@ function pintar() {
   </section>`;
 
   cont.querySelectorAll('.strip button').forEach((b) => b.onclick = () => { idx = +b.dataset.i; pintar(); });
+  const mover = (d) => { idx = (idx + d + fotos.length) % fotos.length; pintar(); };
+  document.getElementById('foto-prev')?.addEventListener('click', () => mover(-1));
+  document.getElementById('foto-next')?.addEventListener('click', () => mover(1));
+  // Deslizar con el dedo en la imagen principal.
+  const main = cont.querySelector('.gallery .main');
+  let x0 = null;
+  main.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  main.addEventListener('touchend', (e) => {
+    if (x0 === null || fotos.length < 2) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 40) mover(dx < 0 ? 1 : -1);
+  });
 
   const cta = document.getElementById('cta');
   if (p.status === 'vendido') {

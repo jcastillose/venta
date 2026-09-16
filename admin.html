@@ -57,8 +57,13 @@
 </dialog>
 
 <script type="module">
-import { sb, SITE_URL, clp, esc, fecha, hora, CATEGORIAS, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
-         estadoHTML, fotoUrl, fail, toast, ICON } from '/src/supabase.js';
+import { sb, SITE_URL, clp, esc, fecha, hora, cargarCategorias, CONDICIONES, condicionLabel, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
+         estadoHTML, fotoUrl, fail, toast, ICON, aplicarTitulo, TITULO_BASE } from '/src/supabase.js';
+
+let tituloActual = TITULO_BASE;
+aplicarTitulo('Administración').then((t) => { tituloActual = t; });
+
+let CATEGORIAS = [];
 
 const view = document.getElementById('view');
 let me = null, vista = 'productos', ctx = {};
@@ -261,6 +266,7 @@ async function cargar() {
   intereses = i.data || []; pagos = y.data || []; cobroCfg = s.data || []; equipo = m.data || []; ofertas = o.data || [];
   ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
   (aj.data || []).forEach((r) => { ajustes[r.key] = r.value === true; });
+  CATEGORIAS = await cargarCategorias();
   navegar();
 }
 const recargar = async () => { await cargar(); render(); };
@@ -303,11 +309,84 @@ function vAjustes() {
       </div>
     </section>
     <div style="display:grid;gap:12px;max-width:820px">
+      <form class="panel" id="form-titulo">
+        <div class="stack"><strong style="font-size:15px">Nombre del sitio</strong><span class="sub" style="font-size:13px;color:var(--muted);line-height:1.5">Aparece en la barra superior de todas las páginas y en el título de la pestaña del navegador.</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input name="titulo" required maxlength="80" value="${esc(tituloActual)}" ${admin ? '' : 'readonly'} aria-label="Nombre del sitio" style="flex:1;min-width:240px;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:${admin ? 'var(--surface)' : '#F6F5F1'};font-size:14px;font-weight:600">
+          ${admin ? '<button class="btn btn-primary">Guardar</button>' : ''}
+        </div>
+      </form>
       ${fila('ofertas_habilitadas', 'Permitir ofertas',
         'Los interesados pueden proponer un monto distinto al precio publicado, al marcar interés y desde su hilo. Desactivado, el precio es fijo y el botón vuelve a ser solo “Me interesa”. Las ofertas ya hechas se conservan y siguen visibles para el equipo.')}
       ${fila('ofertas_publicas', 'Mostrar la oferta más alta en público',
         'Catálogo, detalle y el hilo de cada interesado muestran el monto más alto y cuántas ofertas hay, sin nombres. Desactivado, cada persona solo ve su propia oferta.', !ajustes.ofertas_habilitadas)}
+    </div>
+
+    <section style="padding:44px 0 16px" class="stack">
+      <h3>Categorías</h3>
+      <p class="lead" style="max-width:60ch">Son los filtros del catálogo y las opciones del editor. Renombrar una categoría actualiza sus productos; solo se puede eliminar una categoría sin productos.</p>
+    </section>
+    <div class="tablewrap" style="max-width:820px">
+      ${CATEGORIAS.map((c) => {
+        const n = productos.filter((p) => p.category === c).length;
+        return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line-2)" data-cat-row="${esc(c)}">
+          <div class="stack" style="flex:1;min-width:200px"><strong style="font-size:14.5px">${esc(c)}</strong><span class="sub">${n === 0 ? 'Sin productos' : n === 1 ? '1 producto' : n + ' productos'}</span></div>
+          ${admin ? `<div style="display:inline-flex;gap:8px">
+            <button class="btn btn-secondary" data-cat-ren="${esc(c)}">Renombrar</button>
+            <button class="btn btn-secondary btn-danger" data-cat-del="${esc(c)}" ${n ? 'disabled title="Tiene productos"' : ''} aria-label="Eliminar categoría" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button>
+          </div>` : ''}
+        </div>`; }).join('')}
+      ${admin ? `<form id="form-cat" style="display:flex;gap:8px;align-items:center;padding:12px 16px;background:var(--bg)">
+        <input name="name" required placeholder="Nueva categoría, ej. Decoración" aria-label="Nueva categoría" style="flex:1;min-width:200px;min-height:38px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;font-weight:500">
+        <button class="btn btn-primary">${ICON.plus}Añadir</button>
+      </form>` : ''}
     </div>`;
+
+  document.getElementById('form-cat')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = new FormData(e.target).get('name').trim();
+    if (!name) return;
+    if (CATEGORIAS.some((c) => c.toLowerCase() === name.toLowerCase())) return toast('Ya existe una categoría con ese nombre');
+    const { error } = await sb.from('categories').insert({ name, position: CATEGORIAS.length });
+    if (error) return fail(error);
+    toast(`Categoría “${name}” creada`); recargar();
+  });
+  view.querySelectorAll('[data-cat-ren]').forEach((b) => b.onclick = () => {
+    const row = view.querySelector(`[data-cat-row="${CSS.escape(b.dataset.catRen)}"]`);
+    const actual = b.dataset.catRen;
+    row.innerHTML = `<form style="display:flex;gap:8px;flex:1;min-width:240px;align-items:center">
+      <input name="name" required value="${esc(actual)}" aria-label="Nombre de la categoría" style="flex:1;min-height:38px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:14px;font-weight:500">
+      <button class="btn btn-primary">Guardar</button>
+      <button type="button" class="btn btn-secondary" data-cancel>Cancelar</button></form>`;
+    row.querySelector('input').focus();
+    row.querySelector('[data-cancel]').onclick = () => render();
+    row.querySelector('form').onsubmit = async (e) => {
+      e.preventDefault();
+      const nuevo = new FormData(e.target).get('name').trim();
+      if (!nuevo || nuevo === actual) return render();
+      if (CATEGORIAS.some((c) => c.toLowerCase() === nuevo.toLowerCase())) return toast('Ya existe una categoría con ese nombre');
+      // La FK tiene on update cascade: los productos se actualizan solos.
+      const { error } = await sb.from('categories').update({ name: nuevo }).eq('name', actual);
+      if (error) return fail(error);
+      toast('Categoría renombrada'); recargar();
+    };
+  });
+  view.querySelectorAll('[data-cat-del]').forEach((b) => b.onclick = async () => {
+    const { error } = await sb.rpc('delete_category', { p_name: b.dataset.catDel });
+    if (error) return fail(error);
+    toast('Categoría eliminada'); recargar();
+  });
+
+  document.getElementById('form-titulo').onsubmit = async (e) => {
+    e.preventDefault();
+    const titulo = new FormData(e.target).get('titulo').trim();
+    if (!titulo) return;
+    const { error } = await sb.from('site_settings')
+      .upsert({ key: 'titulo_sitio', value: titulo, updated_by: me.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) return fail(error);
+    tituloActual = await aplicarTitulo('Administración');
+    toast('Nombre del sitio guardado');
+  };
 
   view.querySelectorAll('[data-aj]').forEach((b) => b.onclick = async () => {
     const value = b.dataset.to === 'true';
@@ -368,7 +447,7 @@ function vProductos() {
 
 /* ── editor ─────────────────────────────────────────────────────── */
 function vEditor() {
-  const p = ctx.id ? prod(ctx.id) : { title: '', category: 'Muebles', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible' };
+  const p = ctx.id ? prod(ctx.id) : { title: '', category: CATEGORIAS[0] || '', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible' };
   const fs = ctx.id ? fotos(ctx.id) : [];
   view.innerHTML = `
     <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}Productos</button></div>
@@ -400,7 +479,10 @@ function vEditor() {
         </div>
         <div class="row">
           <label class="field">Lugar de retiro<input name="lugar" value="${esc(p.lugar || '')}" placeholder="Comuna, ciudad"></label>
-          <label class="field">Condición<input name="condicion" value="${esc(p.condicion || '')}" placeholder="Ej. Muy buen estado"></label>
+          <label class="field">Condición<select name="condicion" id="sel-condicion">
+            <option value="">Selecciona…</option>
+            ${CONDICIONES.map(([v, l]) => `<option value="${v}" ${p.condicion === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select><span class="hint" id="condicion-hint"></span></label>
         </div>
         <label class="field">Descripción<textarea name="description" rows="5" placeholder="Medidas, marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
         <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
@@ -419,11 +501,14 @@ function vEditor() {
   const hint = document.getElementById('precio-hint');
   const pintaHint = () => hint.textContent = 'Se mostrará como ' + clp(form.price_clp.value);
   form.price_clp.oninput = pintaHint; pintaHint();
+  const selCond = document.getElementById('sel-condicion'), condHint = document.getElementById('condicion-hint');
+  const pintaCond = () => { const c = CONDICIONES.find((x) => x[0] === selCond.value); condHint.textContent = c ? c[2] : 'Elige la que mejor describa el estado real.'; };
+  selCond.onchange = pintaCond; pintaCond();
 
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
-    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, updated_at: new Date().toISOString(), updated_by: me.id };
+    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, updated_at: new Date().toISOString(), updated_by: me.id };
     const btn = form.querySelector('button');
     btn.disabled = true;
     let error, id = ctx.id;

@@ -18,6 +18,14 @@ Después de `schema.sql`, correr también `docs/supabase/002-ofertas.sql`: crea 
 
 Correr `docs/supabase/003-ajustes.sql`: crea `site_settings` con dos interruptores que el administrador maneja desde **Ajustes**: `ofertas_habilitadas` (los interesados pueden ofertar) y `ofertas_publicas` (la oferta más alta se muestra en catálogo, detalle e hilos). La vista `catalog` y las RPC respetan ambos.
 
+### Migración 004 — categorías y condición
+
+Correr `supabase/004-categorias.sql`: pasa las categorías a la tabla `categories` (el administrador las crea, renombra y elimina desde **Ajustes**; renombrar actualiza los productos en cascada; eliminar solo si no tiene productos) y cierra el campo `condicion` a siete valores que el editor muestra como desplegable.
+
+### Migración 005 — título del sitio
+
+Correr `supabase/005-titulo.sql`: agrega la clave `titulo_sitio` en `site_settings`. El administrador lo edita en **Ajustes → Nombre del sitio** y se aplica a la barra y a la pestaña de todas las páginas.
+
 ## 2. Auth
 
 **Authentication → Sign In / Providers → Email**:

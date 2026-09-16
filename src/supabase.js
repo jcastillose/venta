@@ -6,8 +6,44 @@ export const SITE_URL = 'https://mobventa.netlify.app';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-export const CATEGORIAS = ['Muebles', 'Electrodomésticos', 'Electrónica'];
+export const CATEGORIAS_BASE = ['Muebles', 'Electrodomésticos', 'Electrónica'];
 export const METODOS = { prex: 'Prex', mercadopago: 'MercadoPago', transferencia: 'Transferencia electrónica' };
+
+export const CONDICIONES = [
+  ['nuevo', 'Nuevo, sin uso', 'Sin abrir o sin estrenar; con embalaje o etiquetas.'],
+  ['como_nuevo', 'Como nuevo', 'Usado muy poco; sin marcas visibles.'],
+  ['impecable', 'Impecable', 'Uso normal, cuidado; sin rayas ni desgaste apreciable.'],
+  ['pocos_detalles', 'Pocos detalles de uso', 'Marcas leves que no afectan el funcionamiento.'],
+  ['uso_evidente', 'Con uso evidente', 'Desgaste visible; funciona correctamente.'],
+  ['a_reparar', 'Necesita reparación', 'Tiene una falla o pieza faltante; se indica en la descripción.'],
+  ['repuestos', 'Para repuestos', 'No funciona; se vende por sus partes.'],
+];
+export const condicionLabel = (v) => (CONDICIONES.find((c) => c[0] === v) || [null, v || '—'])[1];
+
+// Categorías desde la tabla; si la migración 004 aún no corrió, usa las tres base.
+export async function cargarCategorias() {
+  const { data, error } = await sb.from('categories').select('name,position').order('position').order('name');
+  if (error || !data?.length) return CATEGORIAS_BASE;
+  return data.map((c) => c.name);
+}
+
+// Título del sitio: se edita en Administración → Ajustes (site_settings.titulo_sitio).
+export const TITULO_BASE = 'Oferta de Muebles y Electrodomésticos';
+export async function tituloSitio() {
+  const { data } = await sb.from('site_settings').select('value').eq('key', 'titulo_sitio').maybeSingle();
+  const v = data?.value;
+  return typeof v === 'string' && v.trim() ? v.trim() : TITULO_BASE;
+}
+// Pinta el título en la marca de la barra y en la pestaña; `sufijo` es el nombre de la página.
+export async function aplicarTitulo(sufijo) {
+  const t = await tituloSitio();
+  window.__tituloSitio = t;
+  document.querySelectorAll('.nav .brand').forEach((el) => { el.textContent = t; });
+  if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE)) {
+    document.title = sufijo ? `${sufijo} — ${t}` : t;
+  }
+  return t;
+}
 
 export const clp = (n) => '$' + Number(n || 0).toLocaleString('es-CL');
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
