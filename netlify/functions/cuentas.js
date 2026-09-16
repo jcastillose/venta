@@ -3,6 +3,8 @@
 // Requiere en Netlify: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 import { createClient } from '@supabase/supabase-js';
 
+// Si SUPABASE_URL falta o apunta a otro proyecto, el JWT del panel no valida.
+// Por eso el frontend manda su URL en x-supabase-url y aquí se compara.
 const URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE = process.env.URL || 'https://mobventa.netlify.app';
@@ -10,13 +12,28 @@ const SITE = process.env.URL || 'https://mobventa.netlify.app';
 export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  if (!URL || !SERVICE) {
+    return json({ error: 'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno de Netlify. Agrégalas y vuelve a desplegar.' }, 500);
+  }
+  const urlCliente = (req.headers.get('x-supabase-url') || '').replace(/\/$/, '');
+  if (urlCliente && urlCliente !== URL.replace(/\/$/, '')) {
+    return json({ error: `SUPABASE_URL en Netlify (${URL}) no coincide con el proyecto que usa el sitio (${urlCliente}). Corrige la variable y redespliega.` }, 500);
+  }
+
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!jwt) return json({ error: 'Falta la sesión' }, 401);
+  if (!jwt) return json({ error: 'Falta la sesión. Recarga el panel y vuelve a entrar.' }, 401);
 
   const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
 
   const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-  if (userErr || !userData?.user) return json({ error: 'Sesión inválida' }, 401);
+  if (userErr || !userData?.user) {
+    console.error('getUser', userErr);
+    const motivo = userErr?.message || '';
+    const pista = /expired/i.test(motivo) ? 'La sesión expiró: recarga el panel y vuelve a entrar.'
+      : /signature|invalid/i.test(motivo) ? 'El token no es de este proyecto o SUPABASE_SERVICE_ROLE_KEY no corresponde a él.'
+      : 'Recarga el panel y vuelve a entrar.';
+    return json({ error: 'Sesión inválida. ' + pista, detalle: motivo }, 401);
+  }
   const yo = userData.user.id;
 
   const { data: me } = await admin.from('members').select('role,status').eq('id', yo).single();

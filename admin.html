@@ -69,7 +69,7 @@
 
 <script type="module">
 import { sb, SITE_URL, clp, esc, fecha, hora, cargarCategorias, CONDICIONES, condicionLabel, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
-         estadoHTML, fotoUrl, fail, toast, ICON, aplicarTitulo, TITULO_BASE } from '/src/supabase.js';
+         estadoHTML, fotoUrl, fail, toast, ICON, aplicarTitulo, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
 
 let tituloActual = TITULO_BASE;
 aplicarTitulo('Administración').then((t) => { tituloActual = t; });
@@ -1008,11 +1008,17 @@ async function vCuenta() {
 
 /* ── cuentas: llamada a la function con la sesión del administrador ── */
 async function llamarCuentas(body) {
-  const { data: { session } } = await sb.auth.getSession();
+  // Refresca el token antes de llamar: uno vencido produce "Sesión inválida".
+  let { data: { session } } = await sb.auth.getSession();
+  if (!session || (session.expires_at || 0) * 1000 - Date.now() < 60_000) {
+    const { data } = await sb.auth.refreshSession();
+    session = data.session || session;
+  }
+  if (!session) { fail(new Error('Tu sesión venció. Recarga el panel y vuelve a entrar.')); return null; }
   try {
     const res = await fetch('/.netlify/functions/cuentas', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token, 'x-supabase-url': SUPABASE_URL },
       body: JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));

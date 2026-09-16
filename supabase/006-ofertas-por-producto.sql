@@ -5,8 +5,10 @@
 
 alter table public.products add column if not exists accepts_offers boolean not null default true;
 
--- El catálogo expone la columna nueva (p.* se expande al crear la vista).
-create or replace view public.catalog as
+-- El catálogo expone la columna nueva. La vista se recrea (p.* se expandió al
+-- crearla y `create or replace` no puede insertar columnas en medio).
+drop view if exists public.catalog;
+create view public.catalog as
   select p.*, m.name as published_by,
          (select count(*) from public.interests i where i.product_id = p.id) as interested_count,
          case when public.setting_on('ofertas_publicas') then o.top_offer_clp end as top_offer_clp,
