@@ -130,9 +130,9 @@ function pintar() {
       <div><a class="btn btn-primary" href="/c/${esc(yaTengo.token)}">${ICON.chat}Abrir conversación</a></div>`;
   } else {
     cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. ${ajustes.ofertas_habilitadas
-        ? 'Puedes pedirlo al precio publicado o hacer una oferta; en ambos casos se abre una conversación privada con quien vende, que decide a quién reservar.'
+        ? 'Al mostrar tu interés se abre una conversación privada con quien vende para coordinar la reserva.'
         : 'El precio es fijo: marcar interés equivale a pedir la reserva y abre una conversación privada con quien vende.'}</p>
-      <p class="lead" style="display:flex;align-items:center;gap:8px"><span class="icon" style="display:inline-grid;color:var(--accent)">${ICON.card}</span><span>Al reservar pagas con ${esc(metodosTexto())}.</span></p>
+      <p class="lead" style="display:flex;align-items:center;gap:8px"><span class="icon" style="display:inline-grid;width:15px;height:15px;flex:none;color:var(--accent)">${ICON.card}</span><span>Al reservar pagas con ${esc(metodosTexto())}.</span></p>
       <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}${ajustes.ofertas_habilitadas ? 'Me interesa / ofertar' : 'Me interesa'}</button></div>`;
     document.getElementById('btn-interes').onclick = abrir;
   }
@@ -148,10 +148,10 @@ function abrir() {
     `Precio ${ajustes.ofertas_habilitadas ? 'publicado' : 'fijo'} ${clp(prod.price_clp)}. Déjanos cómo contactarte; la conversación queda abierta en un enlace privado.`;
   form.oferta.closest('label').classList.toggle('hide', !ajustes.ofertas_habilitadas);
   document.getElementById('oferta-hint').textContent = !ajustes.ofertas_publicas
-    ? `Precio publicado ${clp(prod.price_clp)}. Vacío = lo pides al precio publicado.`
+    ? `Precio publicado ${clp(prod.price_clp)}. Si no indicas nada, se toma el precio publicado.`
     : prod.top_offer_clp
-    ? `Precio publicado ${clp(prod.price_clp)} · oferta más alta hasta ahora ${clp(prod.top_offer_clp)}. Vacío = lo pides al precio publicado.`
-    : `Precio publicado ${clp(prod.price_clp)} · todavía no hay ofertas. Vacío = lo pides al precio publicado.`;
+    ? `Precio publicado ${clp(prod.price_clp)} · oferta más alta hasta ahora ${clp(prod.top_offer_clp)}. Si no indicas nada, se toma el precio publicado.`
+    : `Precio publicado ${clp(prod.price_clp)} · todavía no hay ofertas. Si no indicas nada, se toma el precio publicado.`;
   dlg.showModal();
 }
 
