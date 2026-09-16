@@ -59,28 +59,103 @@ async function init() {
   render();
 }
 
+let modoLogin = localStorage.getItem('vh.modoLogin') || 'password';
+
 function login() {
   document.getElementById('nav-tabs').classList.add('hide');
+  document.getElementById('nav-me').classList.add('hide');
+  const pass = modoLogin === 'password';
   view.innerHTML = `<section class="center">
-    <form class="panel" id="form-login" style="width:min(420px,100%);padding:32px;gap:16px">
+    <div class="panel" style="width:min(420px,100%);padding:32px;gap:16px">
       <div style="width:40px;height:40px;border-radius:8px;background:var(--accent-wash);display:grid;place-items:center;color:var(--accent)">${ICON.login}</div>
       <h2 style="font-size:26px">Acceso equipo</h2>
-      <p class="lead">Entra con el correo de tu cuenta. Te enviamos un enlace de acceso; no hace falta contraseña.</p>
-      <label class="field">Correo<input name="email" type="email" required autocomplete="email"></label>
-      <button class="btn btn-primary btn-block">Enviarme el enlace</button>
+      <div class="tabs" style="gap:18px">
+        <button type="button" role="tab" aria-selected="${pass}" data-modo="password">Contraseña</button>
+        <button type="button" role="tab" aria-selected="${!pass}" data-modo="link">Enlace por correo</button>
+      </div>
+      <form id="form-login" class="form" style="gap:16px">
+        <label class="field">Correo<input name="email" type="email" required autocomplete="email" value="${esc(localStorage.getItem('vh.email') || '')}"></label>
+        ${pass ? `<label class="field">Contraseña<input name="password" type="password" required autocomplete="current-password" minlength="8"></label>` : ''}
+        <button class="btn btn-primary btn-block">${pass ? 'Entrar' : 'Enviarme el enlace'}</button>
+      </form>
+      <p class="lead" style="font-size:12.5px">${pass
+        ? 'La contraseña la creas tú desde <strong>Mi cuenta</strong> la primera vez que entras. Si aún no tienes una, usa el enlace por correo.'
+        : 'Te enviamos un enlace de acceso al correo de tu cuenta. El servicio de correo de Supabase permite pocos envíos por hora.'}</p>
+      ${pass ? `<button type="button" class="btn btn-ghost" id="olvide" style="font-size:12.5px;justify-self:start">Olvidé mi contraseña</button>` : ''}
       <div id="login-msg"></div>
-    </form>
+    </div>
   </section>`;
-  document.getElementById('form-login').onsubmit = async (e) => {
+
+  view.querySelectorAll('[data-modo]').forEach((b) => b.onclick = () => {
+    modoLogin = b.dataset.modo;
+    localStorage.setItem('vh.modoLogin', modoLogin);
+    login();
+  });
+
+  const form = document.getElementById('form-login');
+  const msg = document.getElementById('login-msg');
+
+  form.onsubmit = async (e) => {
     e.preventDefault();
-    const email = new FormData(e.target).get('email').trim();
-    const btn = e.target.querySelector('button');
+    const fd = new FormData(form);
+    const email = fd.get('email').trim();
+    localStorage.setItem('vh.email', email);
+    const btn = form.querySelector('button');
     btn.disabled = true;
+
+    if (modoLogin === 'password') {
+      const { error } = await sb.auth.signInWithPassword({ email, password: fd.get('password') });
+      btn.disabled = false;
+      if (error) {
+        msg.innerHTML = `<div class="note note-warn">Correo o contraseña incorrectos. Si nunca creaste una contraseña, entra con el enlace por correo y créala en <strong>Mi cuenta</strong>.</div>`;
+        return;
+      }
+      me = null;
+      return init();
+    }
+
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: SITE_URL + '/admin.html' } });
     btn.disabled = false;
+    if (error) {
+      msg.innerHTML = `<div class="note note-warn">${esc(error.message)}${/rate/i.test(error.message) ? ' — espera una hora o entra con contraseña.' : ''}</div>`;
+      return;
+    }
+    msg.innerHTML = `<div class="note note-ok">Listo. Revisa <strong>${esc(email)}</strong> y abre el enlace para entrar.</div>`;
+  };
+
+  document.getElementById('olvide')?.addEventListener('click', async () => {
+    const email = (form.email.value || '').trim();
+    if (!email) { form.email.focus(); return toast('Escribe tu correo primero'); }
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL + '/admin.html' });
     if (error) return fail(error);
-    document.getElementById('login-msg').innerHTML =
-      `<div class="note note-ok">Listo. Revisa <strong>${esc(email)}</strong> y abre el enlace para entrar.</div>`;
+    msg.innerHTML = `<div class="note note-ok">Te enviamos un correo para crear una contraseña nueva.</div>`;
+  });
+}
+
+/* Pantalla que aparece al volver del correo de recuperación. */
+function recuperar() {
+  document.getElementById('nav-tabs').classList.add('hide');
+  view.innerHTML = `<section class="center">
+    <form class="panel" id="form-nueva" style="width:min(420px,100%);padding:32px;gap:16px">
+      <h2 style="font-size:26px">Crea tu contraseña</h2>
+      <p class="lead">Elige una de al menos 8 caracteres. Con ella entrarás sin depender del correo.</p>
+      <label class="field">Contraseña nueva<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label class="field">Repítela<input name="password2" type="password" required minlength="8" autocomplete="new-password"></label>
+      <button class="btn btn-primary btn-block">Guardar contraseña</button>
+    </form>
+  </section>`;
+  document.getElementById('form-nueva').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if (fd.get('password') !== fd.get('password2')) return toast('Las contraseñas no coinciden');
+    const { error } = await sb.auth.updateUser({ password: fd.get('password') });
+    if (error) return fail(error);
+    modoLogin = 'password';
+    localStorage.setItem('vh.modoLogin', 'password');
+    toast('Contraseña guardada');
+    history.replaceState(null, '', '/admin.html');
+    me = null;
+    init();
   };
 }
 
@@ -102,7 +177,7 @@ function suspendida(m) {
 }
 
 function navegar() {
-  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo']];
+  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo'], ['cuenta', 'Mi cuenta']];
   const nav = document.getElementById('nav-tabs');
   nav.classList.remove('hide');
   nav.innerHTML = tabs.map(([k, l]) => {
@@ -149,7 +224,7 @@ const nInteresados = (id) => intereses.filter((i) => i.product_id === id).length
 /* ── router ─────────────────────────────────────────────────────── */
 function render() {
   ({ productos: vProductos, editor: vEditor, interesados: vInteresados,
-     chat: vChat, cobros: vCobros, equipo: vEquipo }[vista] || vProductos)();
+     chat: vChat, cobros: vCobros, equipo: vEquipo, cuenta: vCuenta }[vista] || vProductos)();
 }
 
 /* ── productos ──────────────────────────────────────────────────── */
@@ -598,6 +673,72 @@ function vEquipo() {
   });
 }
 
+/* ── mi cuenta ──────────────────────────────────────────────────── */
+async function vCuenta() {
+  const { data: { user } } = await sb.auth.getUser();
+  const tienePass = !!user?.user_metadata?.tiene_password;
+
+  view.innerHTML = `
+    <section class="section-head">
+      <div class="stack">
+        <span class="kicker">${esc(me.email)}</span>
+        <h2>Mi cuenta</h2>
+        <p class="lead" style="max-width:60ch">Crea una contraseña para entrar sin esperar el correo. Puedes cambiarla cuando quieras; el enlace por correo sigue funcionando igual.</p>
+      </div>
+    </section>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;max-width:900px">
+      <form class="panel" id="form-pass">
+        <div class="stack">
+          <strong style="font-size:15px">${tienePass ? 'Cambiar contraseña' : 'Crear contraseña'}</strong>
+          <span class="sub" style="font-size:12.5px;color:var(--muted)">Mínimo 8 caracteres.</span>
+        </div>
+        <label class="field">Contraseña${tienePass ? ' nueva' : ''}<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label class="field">Repítela<input name="password2" type="password" required minlength="8" autocomplete="new-password"></label>
+        <div><button class="btn btn-primary">${tienePass ? 'Guardar cambio' : 'Crear contraseña'}</button></div>
+      </form>
+      <form class="panel" id="form-nombre">
+        <div class="stack">
+          <strong style="font-size:15px">Mi nombre</strong>
+          <span class="sub" style="font-size:12.5px;color:var(--muted)">Es el nombre que ven los interesados en el catálogo y en el chat.</span>
+        </div>
+        <label class="field">Nombre<input name="name" required value="${esc(me.name)}"></label>
+        <label class="field">Rol<input value="${me.role === 'admin' ? 'Administradora' : 'Editor'}" readonly style="background:#F6F5F1"></label>
+        <div><button class="btn btn-primary">Guardar nombre</button></div>
+      </form>
+    </div>`;
+
+  document.getElementById('form-pass').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if (fd.get('password') !== fd.get('password2')) return toast('Las contraseñas no coinciden');
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    const { error } = await sb.auth.updateUser({
+      password: fd.get('password'),
+      data: { tiene_password: true },
+    });
+    btn.disabled = false;
+    if (error) return fail(error);
+    localStorage.setItem('vh.modoLogin', 'password');
+    localStorage.setItem('vh.email', me.email);
+    modoLogin = 'password';
+    toast(tienePass ? 'Contraseña actualizada' : 'Contraseña creada. Ya puedes entrar con ella.');
+    render();
+  };
+
+  document.getElementById('form-nombre').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = new FormData(e.target).get('name').trim();
+    if (!name) return;
+    const { error } = await sb.from('members').update({ name }).eq('id', me.id);
+    if (error) return fail(error);
+    me.name = name;
+    await cargar();
+    navegar();
+    toast('Nombre actualizado');
+  };
+}
+
 /* ── invitación ─────────────────────────────────────────────────── */
 const dlgInv = document.getElementById('dlg-invitar');
 dlgInv.querySelector('[data-close]').onclick = () => dlgInv.close();
@@ -621,8 +762,14 @@ document.getElementById('form-invitar').onsubmit = async (e) => {
   btn.disabled = false;
 };
 
-sb.auth.onAuthStateChange((evt) => { if (evt === 'SIGNED_IN' && !me) init(); });
-init();
+let recuperando = false;
+sb.auth.onAuthStateChange((evt) => {
+  if (evt === 'PASSWORD_RECOVERY') { recuperando = true; return recuperar(); }
+  if (evt === 'SIGNED_IN' && !me && !recuperando) init();
+});
+
+if (/type=recovery/.test(location.hash)) recuperando = true;
+if (!recuperando) init();
 </script>
 </body>
 </html>
