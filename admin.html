@@ -62,7 +62,7 @@ import { sb, SITE_URL, clp, esc, fecha, hora, CATEGORIAS, METODOS, ESTADO, ESTAD
 
 const view = document.getElementById('view');
 let me = null, vista = 'productos', ctx = {};
-let productos = [], fotosPorProducto = {}, intereses = [], pagos = [], cobroCfg = [], equipo = [];
+let productos = [], fotosPorProducto = {}, intereses = [], pagos = [], cobroCfg = [], equipo = [], ofertas = [], ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
 
 /* ── sesión ─────────────────────────────────────────────────────── */
 async function init() {
@@ -213,7 +213,7 @@ function suspendida(m) {
 }
 
 function navegar() {
-  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo'], ['cuenta', 'Mi cuenta']];
+  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo'], ['ajustes', 'Ajustes'], ['cuenta', 'Mi cuenta']];
   const nav = document.getElementById('nav-tabs');
   nav.classList.remove('hide');
   nav.innerHTML = tabs.map(([k, l]) => {
@@ -234,25 +234,31 @@ function ir(v, c = {}) { vista = v; ctx = c; navegar(); render(); window.scrollT
 
 /* ── datos ──────────────────────────────────────────────────────── */
 async function cargar() {
-  const [p, f, i, y, s, m] = await Promise.all([
+  const [p, f, i, y, s, m, o, aj] = await Promise.all([
     sb.from('products').select('*').order('created_at', { ascending: false }),
     sb.from('product_photos').select('*').order('position'),
     sb.from('interests').select('*').order('created_at', { ascending: false }),
     sb.from('payments').select('*'),
     sb.from('payment_settings').select('*'),
     sb.from('members').select('*').order('created_at'),
+    sb.from('offers').select('*'),
+    sb.from('site_settings').select('*'),
   ]);
   if (p.error) return fail(p.error);
   productos = p.data || [];
   fotosPorProducto = {};
   (f.data || []).forEach((x) => (fotosPorProducto[x.product_id] ||= []).push(x));
-  intereses = i.data || []; pagos = y.data || []; cobroCfg = s.data || []; equipo = m.data || [];
+  intereses = i.data || []; pagos = y.data || []; cobroCfg = s.data || []; equipo = m.data || []; ofertas = o.data || [];
+  ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
+  (aj.data || []).forEach((r) => { ajustes[r.key] = r.value === true; });
   navegar();
 }
 const recargar = async () => { await cargar(); render(); };
 
 const prod = (id) => productos.find((p) => p.id === id);
 const pago = (interestId) => pagos.find((p) => p.interest_id === interestId);
+const oferta = (interestId) => ofertas.find((o) => o.interest_id === interestId);
+const topOferta = (productId) => ofertas.filter((o) => o.product_id === productId).reduce((a, o) => Math.max(a, o.amount_clp), 0);
 const nombreDe = (id) => equipo.find((u) => u.id === id)?.name || '—';
 const fotos = (id) => fotosPorProducto[id] || [];
 const nInteresados = (id) => intereses.filter((i) => i.product_id === id).length;
@@ -260,8 +266,47 @@ const nInteresados = (id) => intereses.filter((i) => i.product_id === id).length
 /* ── router ─────────────────────────────────────────────────────── */
 function render() {
   ({ productos: vProductos, editor: vEditor, interesados: vInteresados,
-     chat: vChat, cobros: vCobros, equipo: vEquipo, cuenta: vCuenta }[vista] || vProductos)();
+     chat: vChat, cobros: vCobros, equipo: vEquipo, cuenta: vCuenta, ajustes: vAjustes }[vista] || vProductos)();
 }
+
+/* ── ajustes ─────────────────────────────────────────────────────── */
+function vAjustes() {
+  const admin = me.role === 'admin';
+  const fila = (key, titulo, desc, disabled) => {
+    const on = !!ajustes[key];
+    return `<div class="panel" style="opacity:${disabled ? .55 : 1}">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div class="stack" style="flex:1;min-width:220px">
+          <strong style="font-size:15px">${titulo}</strong>
+          <span class="sub" style="font-size:13px;color:var(--muted);line-height:1.5">${desc}</span>
+        </div>
+        <span class="state"><span class="dot" style="background:${on ? 'var(--verde)' : 'var(--gris)'}"></span>${on ? 'Activo' : 'Desactivado'}</span>
+        ${admin ? `<button class="btn ${on ? 'btn-secondary' : 'btn-primary'}" data-aj="${key}" data-to="${!on}" ${disabled ? 'disabled' : ''}>${on ? 'Desactivar' : 'Activar'}</button>` : ''}
+      </div></div>`;
+  };
+  view.innerHTML = `
+    <section class="section-head">
+      <div class="stack">
+        <span class="kicker">Sitio público</span>
+        <h2>Ajustes</h2>
+        <p class="lead" style="max-width:60ch">Cambios que aplican a todo el catálogo al instante. ${admin ? '' : 'Solo un administrador puede modificarlos.'}</p>
+      </div>
+    </section>
+    <div style="display:grid;gap:12px;max-width:820px">
+      ${fila('ofertas_habilitadas', 'Permitir ofertas',
+        'Los interesados pueden proponer un monto distinto al precio publicado, al marcar interés y desde su hilo. Desactivado, el precio es fijo y el botón vuelve a ser solo “Me interesa”. Las ofertas ya hechas se conservan y siguen visibles para el equipo.')}
+      ${fila('ofertas_publicas', 'Mostrar la oferta más alta en público',
+        'Catálogo, detalle y el hilo de cada interesado muestran el monto más alto y cuántas ofertas hay, sin nombres. Desactivado, cada persona solo ve su propia oferta.', !ajustes.ofertas_habilitadas)}
+    </div>`;
+
+  view.querySelectorAll('[data-aj]').forEach((b) => b.onclick = async () => {
+    const value = b.dataset.to === 'true';
+    const { error } = await sb.from('site_settings')
+      .upsert({ key: b.dataset.aj, value, updated_by: me.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) return fail(error);
+    toast(value ? 'Activado' : 'Desactivado');
+    recargar();
+  });
 
 /* ── productos ──────────────────────────────────────────────────── */
 function vProductos() {
@@ -287,7 +332,7 @@ function vProductos() {
         return `<tr>
           <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
             <div class="stack"><strong>${esc(p.title)}</strong><span class="sub">${esc(p.category)} · ${fotos(p.id).length} fotos</span></div></div></td>
-          <td class="num">${clp(p.price_clp)}</td>
+          <td class="num"><div class="stack">${clp(p.price_clp)}${topOferta(p.id) ? `<span class="sub" style="font-weight:500">Oferta máx. ${clp(topOferta(p.id))}</span>` : ''}</div></td>
           <td><div class="cellflex"><span class="dot" style="background:${ESTADO[p.status].color}"></span>
             <select data-status="${p.id}">${Object.keys(ESTADO).map((k) =>
               `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></div></td>
@@ -426,7 +471,8 @@ function vInteresados() {
   const mapa = { 'Nuevos': 'nuevo', 'En conversación': 'conversando', 'Reservados': 'reservado' };
   const lista = intereses
     .filter((i) => !ctx.productId || i.product_id === ctx.productId)
-    .filter((i) => filtro === 'Todos' || i.status === mapa[filtro]);
+    .filter((i) => filtro === 'Todos' || i.status === mapa[filtro])
+    .sort((a, b) => (oferta(b.id)?.amount_clp || 0) - (oferta(a.id)?.amount_clp || 0) || new Date(b.created_at) - new Date(a.created_at));
   const nuevos = intereses.filter((i) => i.status === 'nuevo').length;
 
   view.innerHTML = `
@@ -446,6 +492,8 @@ function vInteresados() {
       const p = prod(i.product_id) || {};
       const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
       const y = pago(i.id);
+      const of = oferta(i.id);
+      const esTop = of && of.amount_clp >= topOferta(i.product_id);
       const pagoSt = y ? y.status : (i.status === 'reservado' ? 'pendiente' : null);
       return `<article>
         ${f ? `<img class="avatar" src="${f}" alt="">` : '<div class="avatar"></div>'}
@@ -457,6 +505,7 @@ function vInteresados() {
             <span class="sub" style="color:var(--faint)">${fecha(i.created_at)}</span>
           </div>
           <div class="sub">${esc(p.title || '')} · ${esc(i.buyer_contact)}</div>
+          <div class="sub" style="color:${esTop ? 'var(--accent)' : 'var(--ink-2)'};font-weight:600">${of ? `Ofrece ${clp(of.amount_clp)}${esTop ? ' · oferta más alta' : ''}` : `Pide al precio publicado ${clp(p.price_clp)}`}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${i.status !== 'reservado' && i.status !== 'vendido' && p.status !== 'vendido'
@@ -515,7 +564,7 @@ async function vChat() {
         ${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
         <div style="flex:1;min-width:160px">
           <div style="font-size:15px;font-weight:600;letter-spacing:-.01em">${esc(p.title || '')}</div>
-          <div class="sub">${esc(i.buyer_name)} · ${esc(i.buyer_contact)} · ${clp(p.price_clp)}</div>
+          <div class="sub">${esc(i.buyer_name)} · ${esc(i.buyer_contact)} · ${oferta(i.id) ? `ofrece <strong>${clp(oferta(i.id).amount_clp)}</strong> (precio ${clp(p.price_clp)})` : `precio publicado ${clp(p.price_clp)}`}</div>
         </div>
         ${estadoHTML(ESTADO_INTERES, i.status)}
       </header>

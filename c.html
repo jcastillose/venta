@@ -20,6 +20,18 @@
   <div id="cont"><p class="spinner">Abriendo tu conversación…</p></div>
 </main>
 
+<dialog id="dlg-oferta">
+  <form class="sheet" id="form-oferta">
+    <div class="title" id="oferta-titulo">Hacer una oferta</div>
+    <p id="oferta-bajada"></p>
+    <label class="field">Tu oferta (CLP)<input name="monto" type="number" min="1000" step="1000" inputmode="numeric" required placeholder="Ej. 150000"></label>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="oferta-cancelar">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Enviar oferta</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlg-pago">
   <form class="sheet" id="form-pago">
     <div class="stack">
@@ -65,6 +77,27 @@ async function cargar() {
 function pagoEstado() {
   if (!hilo.payment_status) return hilo.interest_status === 'reservado' ? 'pendiente' : null;
   return hilo.payment_status;
+}
+
+function franjaOferta() {
+  if (hilo.offers_enabled === false) return '';
+  if (hilo.product_status === 'vendido' || hilo.interest_status === 'vendido') return '';
+  const top = hilo.top_offer_clp, mia = hilo.my_offer_clp, n = Number(hilo.offer_count || 0);
+  const soyTop = mia && top && mia >= top;
+  const resumen = top
+    ? `Oferta más alta hasta ahora <strong>${clp(top)}</strong> · ${n} ${n === 1 ? 'oferta' : 'ofertas'} · precio publicado ${clp(hilo.price_clp)}.`
+    : (top === null && n === 0 && mia) ? `Precio publicado ${clp(hilo.price_clp)}.` : `Todavía no hay ofertas. Precio publicado ${clp(hilo.price_clp)}.`;
+  const propia = mia
+    ? `Tu oferta: <strong>${clp(mia)}</strong>${top ? (soyTop ? ' — es la más alta.' : ' — hay una oferta mayor.') : '.'}`
+    : 'Aún no has ofertado; estás pidiendo el producto al precio publicado.';
+  return `
+  <div class="note note-plain strip-pay" style="max-width:780px;margin-top:14px">
+    <div class="txt">
+      <span class="state"><span class="dot" style="background:${soyTop ? 'var(--verde)' : 'var(--accent)'}"></span>Ofertas</span>
+      <span style="font-size:13.5px;line-height:1.55;color:var(--ink-2)">${resumen}<br>${propia}</span>
+    </div>
+    <button class="btn btn-secondary" id="btn-ofertar">${mia ? 'Mejorar mi oferta' : 'Hacer una oferta'}</button>
+  </div>`;
 }
 
 function franjaPago() {
@@ -119,11 +152,12 @@ function pintar() {
         <button type="submit" aria-label="Enviar">${ICON.send}</button>
       </form>
     </section>
-    ${franjaPago()}`;
+    ${franjaOferta()}${franjaPago()}`;
 
   const log = document.getElementById('log');
   log.scrollTop = log.scrollHeight;
   document.getElementById('btn-pagar')?.addEventListener('click', abrirPago);
+  document.getElementById('btn-ofertar')?.addEventListener('click', abrirOferta);
 
   document.getElementById('form-msg').onsubmit = async (e) => {
     e.preventDefault();
@@ -136,6 +170,35 @@ function pintar() {
     cargar();
   };
 }
+
+const dlgOferta = document.getElementById('dlg-oferta');
+document.getElementById('oferta-cancelar').onclick = () => dlgOferta.close();
+
+function abrirOferta() {
+  const f = document.getElementById('form-oferta');
+  f.monto.value = hilo.my_offer_clp || '';
+  f.monto.min = hilo.my_offer_clp ? hilo.my_offer_clp + 1000 : 1000;
+  document.getElementById('oferta-titulo').textContent = hilo.my_offer_clp ? 'Mejorar mi oferta' : 'Hacer una oferta';
+  document.getElementById('oferta-bajada').textContent =
+    `${hilo.product_title} · precio publicado ${clp(hilo.price_clp)}` +
+    (hilo.top_offer_clp ? ` · oferta más alta ${clp(hilo.top_offer_clp)}.` : ' · sin ofertas todavía.') +
+    ' Quien vende decide a quién reservar; la oferta más alta se muestra públicamente sin tu nombre.';
+  dlgOferta.showModal();
+}
+
+document.getElementById('form-oferta').onsubmit = async (e) => {
+  e.preventDefault();
+  const monto = Number(new FormData(e.target).get('monto'));
+  if (hilo.my_offer_clp && monto <= hilo.my_offer_clp) return toast('La nueva oferta debe superar la tuya actual');
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  const { error } = await sb.rpc('place_offer_by_token', { p_token: token, p_amount: monto });
+  btn.disabled = false;
+  if (error) return fail(error);
+  dlgOferta.close();
+  toast('Oferta enviada');
+  cargar();
+};
 
 const dlg = document.getElementById('dlg-pago');
 document.getElementById('pago-cancelar').onclick = () => dlg.close();

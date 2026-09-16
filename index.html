@@ -47,6 +47,7 @@ const filtros = document.getElementById('filtros');
 let cat = new URLSearchParams(location.search).get('cat') || 'Todo';
 let verVendidos = true;
 let items = [];
+let ofertasVisibles = true;
 
 const hilos = misTokens();
 if (hilos.length) {
@@ -89,6 +90,7 @@ function pintar() {
       <div class="stack">
         <div class="titles"><span>${esc(p.title)}</span><span class="price">${clp(p.price_clp)}</span></div>
         <div class="meta">${esc(p.category)} · ${esc(p.published_by || '')}</div>
+        ${ofertasVisibles && p.top_offer_clp ? `<div class="meta" style="margin-top:4px">Oferta más alta <strong style="color:var(--ink)">${clp(p.top_offer_clp)}</strong> · ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</div>` : ''}
         <div class="meta" style="color:var(--accent);font-weight:600;margin-top:4px">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}</div>
       </div>
     </a>`;
@@ -99,6 +101,9 @@ async function cargar() {
   grid.innerHTML = '<p class="spinner">Cargando catálogo…</p>';
   const { data, error } = await sb.from('catalog').select('*').order('created_at', { ascending: false });
   if (error) { grid.innerHTML = ''; return fail(error); }
+  const { data: st } = await sb.from('site_settings').select('key,value');
+  const aj = Object.fromEntries((st || []).map((r) => [r.key, r.value === true]));
+  ofertasVisibles = (aj.ofertas_habilitadas ?? true) && (aj.ofertas_publicas ?? true);
 
   const ids = data.map((p) => p.id);
   const fotos = ids.length
@@ -111,7 +116,7 @@ async function cargar() {
 
   const vendedores = new Set(items.map((p) => p.published_by)).size;
   document.getElementById('resumen').textContent =
-    `${items.length} productos · ${vendedores} ${vendedores === 1 ? 'vendedor' : 'vendedores'} · precio fijo, trato directo con quien vende`;
+    `${items.length} productos · ${vendedores} ${vendedores === 1 ? 'vendedor' : 'vendedores'} · ${ofertasVisibles ? 'precio publicado, ofertas abiertas' : 'precio fijo'}, trato directo con quien vende`;
   pintar();
 }
 
@@ -120,6 +125,8 @@ cargar();
 
 sb.channel('catalogo')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, cargar)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'offers' }, cargar)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, cargar)
   .subscribe();
 </script>
 </body>

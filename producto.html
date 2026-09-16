@@ -27,6 +27,7 @@
     <p id="dlg-bajada"></p>
     <label class="field">Tu nombre<input name="nombre" required autocomplete="name"></label>
     <label class="field">Correo o WhatsApp<input name="contacto" required placeholder="+56 9 … o tu@correo.cl"></label>
+    <label class="field">Tu oferta (opcional)<input name="oferta" type="number" min="1000" step="1000" inputmode="numeric" placeholder="Ej. 150000"><span class="hint" id="oferta-hint">Precio publicado y oferta más alta abajo. Si dejas esto vacío, pides el producto al precio publicado.</span></label>
     <label class="field">Mensaje (opcional)<textarea name="mensaje" rows="3" placeholder="¿Cuándo podrías retirar? ¿Alguna duda?"></textarea></label>
     <div class="actions">
       <button type="button" class="btn btn-secondary" id="cancelar">Cancelar</button>
@@ -42,16 +43,18 @@ const id = (location.pathname.match(/^\/p\/(.+)$/)?.[1]) || new URLSearchParams(
 const cont = document.getElementById('detalle');
 document.getElementById('volver').insertAdjacentHTML('afterbegin', ICON.back);
 
-let prod, fotos = [], idx = 0, metodos = [];
+let prod, fotos = [], idx = 0, metodos = [], ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
 
 async function cargar() {
   if (!id) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
-  const [{ data: p, error }, { data: f }, { data: m }] = await Promise.all([
+  const [{ data: p, error }, { data: f }, { data: m }, { data: st }] = await Promise.all([
     sb.from('catalog').select('*').eq('id', id).single(),
     sb.from('product_photos').select('storage_path,position').eq('product_id', id).order('position'),
     sb.from('payment_options').select('method'),
+    sb.from('site_settings').select('key,value'),
   ]);
   if (error || !p) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
+  (st || []).forEach((r) => { ajustes[r.key] = r.value === true; });
   prod = p; fotos = f || []; metodos = (m || []).map((x) => METODOS[x.method] || x.method);
   document.title = p.title + ' — venta.hogar';
   pintar();
@@ -92,6 +95,7 @@ function pintar() {
         <div><span class="k">Retiro</span>${esc(p.lugar || '—')}</div>
         <div><span class="k">Condición</span>${esc(p.condicion || '—')}</div>
         <div><span class="k">Publicado</span>${fecha(p.created_at)}</div>
+        ${ajustes.ofertas_habilitadas && ajustes.ofertas_publicas ? `<div><span class="k">Oferta más alta</span>${p.top_offer_clp ? `<strong style="color:var(--accent)">${clp(p.top_offer_clp)}</strong> <span style="color:var(--muted)">· ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</span>` : '<span style="color:var(--muted)">Sin ofertas aún</span>'}</div>` : ''}
       </div>
       <div id="cta" style="display:grid;gap:12px"></div>
     </div>
@@ -106,9 +110,11 @@ function pintar() {
     cta.innerHTML = `<p class="lead">Ya marcaste tu interés en este producto.</p>
       <div><a class="btn btn-primary" href="/c/${esc(yaTengo.token)}">${ICON.chat}Abrir conversación</a></div>`;
   } else {
-    cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. El precio es fijo: marcar interés equivale a pedir la reserva y abre una conversación privada con quien vende.</p>
+    cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. ${ajustes.ofertas_habilitadas
+        ? 'Puedes pedirlo al precio publicado o hacer una oferta; en ambos casos se abre una conversación privada con quien vende, que decide a quién reservar.'
+        : 'El precio es fijo: marcar interés equivale a pedir la reserva y abre una conversación privada con quien vende.'}</p>
       <p class="lead" style="display:inline-flex;align-items:center;gap:8px">${ICON.card}Al reservar pagas con ${esc(metodosTexto())}.</p>
-      <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}Me interesa</button></div>`;
+      <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}${ajustes.ofertas_habilitadas ? 'Me interesa / ofertar' : 'Me interesa'}</button></div>`;
     document.getElementById('btn-interes').onclick = abrir;
   }
 }
@@ -120,7 +126,13 @@ document.getElementById('cancelar').onclick = () => dlg.close();
 function abrir() {
   document.getElementById('dlg-titulo').textContent = 'Me interesa: ' + prod.title;
   document.getElementById('dlg-bajada').textContent =
-    `Precio fijo ${clp(prod.price_clp)}. Déjanos cómo contactarte; la conversación queda abierta en un enlace privado.`;
+    `Precio ${ajustes.ofertas_habilitadas ? 'publicado' : 'fijo'} ${clp(prod.price_clp)}. Déjanos cómo contactarte; la conversación queda abierta en un enlace privado.`;
+  form.oferta.closest('label').classList.toggle('hide', !ajustes.ofertas_habilitadas);
+  document.getElementById('oferta-hint').textContent = !ajustes.ofertas_publicas
+    ? `Precio publicado ${clp(prod.price_clp)}. Vacío = lo pides al precio publicado.`
+    : prod.top_offer_clp
+    ? `Precio publicado ${clp(prod.price_clp)} · oferta más alta hasta ahora ${clp(prod.top_offer_clp)}. Vacío = lo pides al precio publicado.`
+    : `Precio publicado ${clp(prod.price_clp)} · todavía no hay ofertas. Vacío = lo pides al precio publicado.`;
   dlg.showModal();
 }
 
@@ -129,11 +141,13 @@ form.onsubmit = async (e) => {
   const btn = form.querySelector('[type=submit]');
   btn.disabled = true;
   const fd = new FormData(form);
+  const oferta = ajustes.ofertas_habilitadas && fd.get('oferta') ? Number(fd.get('oferta')) : null;
   const { data, error } = await sb.rpc('create_interest', {
     p_product: prod.id,
     p_name: fd.get('nombre').trim(),
     p_contact: fd.get('contacto').trim(),
     p_message: (fd.get('mensaje') || '').trim() || null,
+    p_offer: oferta,
   });
   btn.disabled = false;
   if (error) return fail(error);
