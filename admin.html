@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=6">
+<link rel="stylesheet" href="/src/app.css?v=7">
 </head>
 <body>
 <nav class="nav">
@@ -41,6 +41,17 @@
     <div class="actions">
       <button type="button" class="btn btn-secondary" data-close>Cancelar</button>
       <button type="submit" class="btn btn-primary" id="cuenta-cta">Crear cuenta</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-ofertas">
+  <form class="sheet" method="dialog" id="form-ofertas">
+    <div class="title" id="ofertas-titulo"></div>
+    <p id="ofertas-texto"></p>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" data-close>Cancelar</button>
+      <button type="submit" class="btn btn-primary" id="ofertas-ok"></button>
     </div>
   </form>
 </dialog>
@@ -288,6 +299,7 @@ function render() {
 /* ── ajustes ─────────────────────────────────────────────────────── */
 function vAjustes() {
   const admin = me.role === 'admin';
+  const conOfertas = productos.filter((p) => p.accepts_offers !== false).length;
   const fila = (key, titulo, desc, disabled) => {
     const on = !!ajustes[key];
     return `<div class="panel" style="opacity:${disabled ? .55 : 1}">
@@ -316,10 +328,10 @@ function vAjustes() {
           ${admin ? '<button class="btn btn-primary">Guardar</button>' : ''}
         </div>
       </form>
-      ${fila('ofertas_habilitadas', 'Permitir ofertas',
-        'Los interesados pueden proponer un monto distinto al precio publicado, al marcar interés y desde su hilo. Desactivado, el precio es fijo y el botón vuelve a ser solo “Me interesa”. Las ofertas ya hechas se conservan y siguen visibles para el equipo.')}
+      ${fila('ofertas_habilitadas', 'Permitir ofertas en todos los productos',
+        `Interruptor general: al activarlo o desactivarlo se cambia el estado de ofertas de <strong>todos</strong> los productos publicados y queda como valor por defecto para los nuevos. Después puedes ajustar cada producto por separado desde su ficha o desde la lista. Ahora: ${conOfertas} de ${productos.length} ${productos.length === 1 ? 'producto acepta' : 'productos aceptan'} ofertas.`)}
       ${fila('ofertas_publicas', 'Mostrar la oferta más alta en público',
-        'Catálogo, detalle y el hilo de cada interesado muestran el monto más alto y cuántas ofertas hay, sin nombres. Desactivado, cada persona solo ve su propia oferta.', !ajustes.ofertas_habilitadas)}
+        'Catálogo, detalle y el hilo de cada interesado muestran el monto más alto y cuántas ofertas hay, sin nombres. Desactivado, cada persona solo ve su propia oferta.', !conOfertas)}
     </div>
 
     <section style="padding:44px 0 16px" class="stack">
@@ -390,12 +402,38 @@ function vAjustes() {
 
   view.querySelectorAll('[data-aj]').forEach((b) => b.onclick = async () => {
     const value = b.dataset.to === 'true';
+    if (b.dataset.aj === 'ofertas_habilitadas') return confirmarOfertasGlobal(value);
     const { error } = await sb.from('site_settings')
       .upsert({ key: b.dataset.aj, value, updated_by: me.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) return fail(error);
     toast(value ? 'Activado' : 'Desactivado');
     recargar();
   });
+}
+
+function confirmarOfertasGlobal(value) {
+  const afectados = productos.filter((p) => (p.accepts_offers !== false) !== value).length;
+  const n = productos.length;
+  document.getElementById('ofertas-titulo').textContent = value ? 'Activar ofertas en todos los productos' : 'Desactivar ofertas en todos los productos';
+  document.getElementById('ofertas-texto').innerHTML =
+    `<strong>Atención:</strong> se cambiará el estado de ofertas de <strong>${n === 1 ? 'el único producto publicado' : `los ${n} productos publicados`}</strong>${afectados && afectados !== n ? ` (${afectados} ${afectados === 1 ? 'cambia' : 'cambian'} respecto a su ajuste actual)` : ''}. ${value
+      ? 'Todos aceptarán ofertas de los interesados, incluidos los que hoy tienen precio fijo.'
+      : 'Todos quedarán con precio fijo y el botón pasará a ser solo “Me interesa”; las ofertas ya hechas se conservan.'} Los productos nuevos tomarán este valor. Podrás volver a ajustar cada producto por separado.`;
+  const ok = document.getElementById('ofertas-ok');
+  ok.textContent = value ? 'Sí, activar en todos' : 'Sí, desactivar en todos';
+  ok.style.background = value ? '' : 'var(--rojo)';
+  const dlg = document.getElementById('dlg-ofertas');
+  document.getElementById('form-ofertas').onsubmit = async (e) => {
+    e.preventDefault();
+    ok.disabled = true;
+    const { error } = await sb.rpc('set_offers_for_all', { p_on: value });
+    ok.disabled = false;
+    if (error) return fail(error);
+    dlg.close();
+    toast(value ? 'Ofertas activadas en todos los productos' : 'Ofertas desactivadas en todos los productos');
+    recargar();
+  };
+  dlg.showModal();
 }
 
 /* ── productos ──────────────────────────────────────────────────── */
@@ -416,7 +454,7 @@ function vProductos() {
         .map(([l, n, c]) => `<div class="stat"><span class="state"><span class="dot" style="background:${c}"></span>${l}</span><b>${n}</b></div>`).join('')}
     </div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Producto</th><th>Precio</th><th>Estado</th><th>Publicado por</th><th>Interesados</th><th></th></tr></thead>
+      <thead><tr><th>Producto</th><th>Precio</th><th>Estado</th><th>Ofertas</th><th>Publicado por</th><th>Interesados</th><th></th></tr></thead>
       <tbody>${productos.map((p) => {
         const f = fotoUrl(fotos(p.id)[0]?.storage_path);
         return `<tr>
@@ -426,6 +464,8 @@ function vProductos() {
           <td><div class="cellflex"><span class="dot" style="background:${ESTADO[p.status].color}"></span>
             <select data-status="${p.id}">${Object.keys(ESTADO).map((k) =>
               `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></div></td>
+          <td><button class="btn btn-ghost" data-offers="${p.id}" data-to="${p.accepts_offers === false}" title="${p.accepts_offers === false ? 'Activar ofertas en este producto' : 'Desactivar ofertas en este producto'}" style="padding:4px 8px;display:inline-flex;align-items:center;gap:6px;color:${p.accepts_offers === false ? 'var(--muted)' : 'var(--ink)'}">
+            <span class="dot" style="background:${p.accepts_offers === false ? 'var(--gris)' : 'var(--verde)'}"></span>${p.accepts_offers === false ? 'Precio fijo' : 'Acepta ofertas'}</button></td>
           <td class="sub">${esc(nombreDe(p.created_by))}</td>
           <td><button class="btn btn-ghost" style="color:var(--accent)" data-int="${p.id}">${nInteresados(p.id) || 'Sin'} interesados</button></td>
           <td class="right"><button class="btn btn-secondary" data-edit="${p.id}">${ICON.edit}Editar</button></td>
@@ -435,6 +475,16 @@ function vProductos() {
   document.getElementById('nuevo').onclick = () => ir('editor', { id: null });
   view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => ir('editor', { id: b.dataset.edit }));
   view.querySelectorAll('[data-int]').forEach((b) => b.onclick = () => ir('interesados', { productId: b.dataset.int }));
+  view.querySelectorAll('[data-offers]').forEach((b) => b.onclick = async () => {
+    const on = b.dataset.to === 'true';
+    b.disabled = true;
+    const { error } = await sb.from('products')
+      .update({ accepts_offers: on, updated_at: new Date().toISOString(), updated_by: me.id })
+      .eq('id', b.dataset.offers);
+    if (error) { b.disabled = false; return fail(error); }
+    toast(on ? 'Este producto ahora acepta ofertas' : 'Este producto queda con precio fijo');
+    recargar();
+  });
   view.querySelectorAll('[data-status]').forEach((s) => s.onchange = async () => {
     const { error } = await sb.from('products')
       .update({ status: s.value, updated_at: new Date().toISOString(), updated_by: me.id })
@@ -447,7 +497,7 @@ function vProductos() {
 
 /* ── editor ─────────────────────────────────────────────────────── */
 function vEditor() {
-  const p = ctx.id ? prod(ctx.id) : { title: '', category: CATEGORIAS[0] || '', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible' };
+  const p = ctx.id ? prod(ctx.id) : { title: '', category: CATEGORIAS[0] || '', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible', accepts_offers: ajustes.ofertas_habilitadas !== false };
   const fs = ctx.id ? fotos(ctx.id) : [];
   view.innerHTML = `
     <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}Productos</button></div>
@@ -485,8 +535,14 @@ function vEditor() {
           </select><span class="hint" id="condicion-hint"></span></label>
         </div>
         <label class="field">Descripción<textarea name="description" rows="5" placeholder="Medidas, marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
-        <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
-          `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></label>
+        <div class="row">
+          <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
+            `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></label>
+          <label class="field">Ofertas<select name="accepts_offers">
+            <option value="true" ${p.accepts_offers !== false ? 'selected' : ''}>Acepta ofertas</option>
+            <option value="false" ${p.accepts_offers === false ? 'selected' : ''}>Precio fijo (sin ofertas)</option>
+          </select><span class="hint">Solo afecta a este producto. El interruptor general está en Ajustes.</span></label>
+        </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:8px">
           <button class="btn btn-primary" style="padding:12px 20px;font-size:14px">${ctx.id ? 'Guardar cambios' : 'Publicar'}</button>
           <button type="button" class="btn btn-secondary" style="padding:12px 20px;font-size:14px" id="cancelar">Cancelar</button>
@@ -508,7 +564,7 @@ function vEditor() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
-    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, updated_at: new Date().toISOString(), updated_by: me.id };
+    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, accepts_offers: fd.accepts_offers !== 'false', updated_at: new Date().toISOString(), updated_by: me.id };
     const btn = form.querySelector('button');
     btn.disabled = true;
     let error, id = ctx.id;
@@ -972,6 +1028,8 @@ async function llamarCuentas(body) {
 
 const dlgCuenta = document.getElementById('dlg-cuenta');
 const dlgEliminar = document.getElementById('dlg-eliminar');
+const dlgOfertas = document.getElementById('dlg-ofertas');
+dlgOfertas.querySelector('[data-close]').onclick = () => dlgOfertas.close();
 dlgCuenta.querySelector('[data-close]').onclick = () => dlgCuenta.close();
 dlgEliminar.querySelector('[data-close]').onclick = () => dlgEliminar.close();
 

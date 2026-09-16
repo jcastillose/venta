@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=6">
+<link rel="stylesheet" href="/src/app.css?v=7">
 </head>
 <body>
 <nav class="nav">
@@ -88,13 +88,13 @@ function pintar() {
     return `<a class="card ${p.status === 'vendido' ? 'sold' : ''}" href="/p/${p.id}">
       <div class="thumb">
         ${foto ? `<img src="${foto}" alt="${esc(p.title)}" loading="lazy">` : placeholderSVG(p.category)}
-        <span class="pill" style="position:absolute;bottom:12px;left:12px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.12)"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
-        ${p.photo_count > 1 ? `<span class="pill" style="position:absolute;bottom:12px;right:12px;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.12)">${p.photo_count} fotos</span>` : ''}
+        <span class="pill" style="position:absolute;bottom:12px;left:12px;z-index:2;white-space:nowrap;background:#fff;color:#141414;box-shadow:0 1px 3px rgba(0,0,0,.15)"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
+        ${p.photo_count > 1 ? `<span class="pill count" style="position:absolute;bottom:12px;right:12px;z-index:2;background:#fff;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.15)">${p.photo_count} fotos</span>` : ''}
       </div>
       <div class="stack">
         <div class="titles"><span>${esc(p.title)}</span><span class="price">${clp(p.price_clp)}</span></div>
         <div class="meta">${esc(p.category)}</div>
-        ${ofertasVisibles && p.top_offer_clp ? `<div class="meta" style="margin-top:4px">Oferta más alta <strong style="color:var(--ink)">${clp(p.top_offer_clp)}</strong> · ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</div>` : ''}
+        ${ofertasVisibles && p.accepts_offers !== false && p.top_offer_clp ? `<div class="meta" style="margin-top:4px">Oferta más alta <strong style="color:var(--ink)">${clp(p.top_offer_clp)}</strong> · ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</div>` : ''}
         <div class="meta" style="color:var(--accent);font-weight:600;margin-top:4px;line-height:1.4">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}</div>
       </div>
     </a>`;
@@ -110,7 +110,7 @@ async function cargar() {
   if (error) { grid.innerHTML = ''; return fail(error); }
   const { data: st } = await sb.from('site_settings').select('key,value');
   const aj = Object.fromEntries((st || []).map((r) => [r.key, r.value === true]));
-  ofertasVisibles = (aj.ofertas_habilitadas ?? true) && (aj.ofertas_publicas ?? true);
+  ofertasVisibles = aj.ofertas_publicas ?? true;
 
   const ids = data.map((p) => p.id);
   const fotos = ids.length

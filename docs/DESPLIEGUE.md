@@ -26,6 +26,10 @@ Correr `supabase/004-categorias.sql`: pasa las categorías a la tabla `categorie
 
 Correr `supabase/005-titulo.sql`: agrega la clave `titulo_sitio` en `site_settings`. El administrador lo edita en **Ajustes → Nombre del sitio** y se aplica a la barra y a la pestaña de todas las páginas.
 
+### Migración 006 — ofertas por producto
+
+Correr `supabase/006-ofertas-por-producto.sql`: agrega `products.accepts_offers` (por defecto activo). Lo que rige en cada producto es este campo: se cambia desde **Productos** (columna Ofertas) o en el editor. El interruptor **Ajustes → Permitir ofertas en todos los productos** pasa a ser masivo: la RPC `set_offers_for_all` actualiza el ajuste y el estado de todos los productos a la vez (el panel pide confirmación y advierte cuántos cambian) y queda como valor por defecto para los productos nuevos. `create_interest`, `place_offer_by_token` y `thread_by_token` respetan el campo del producto.
+
 ## 2. Auth
 
 **Authentication → Sign In / Providers → Email**:
