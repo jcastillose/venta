@@ -98,7 +98,7 @@ function login() {
   const pass = modoLogin === 'password';
   view.innerHTML = `<section class="center">
     <div class="panel" style="width:min(420px,100%);padding:32px;gap:16px">
-      <div style="width:40px;height:40px;border-radius:8px;background:var(--accent-wash);display:grid;place-items:center;color:var(--accent)">${ICON.login}</div>
+      <div class="icon-box" style="width:40px;height:40px;border-radius:8px;background:var(--accent-wash);display:grid;place-items:center;color:var(--accent)">${ICON.login}</div>
       <h2 style="font-size:26px">Acceso equipo</h2>
       <div class="tabs" style="gap:18px">
         <button type="button" role="tab" aria-selected="${pass}" data-modo="password">Contraseña</button>
