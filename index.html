@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css">
+<link rel="stylesheet" href="/src/app.css?v=6">
 </head>
 <body>
 <nav class="nav">
@@ -88,7 +88,7 @@ function pintar() {
     return `<a class="card ${p.status === 'vendido' ? 'sold' : ''}" href="/p/${p.id}">
       <div class="thumb">
         ${foto ? `<img src="${foto}" alt="${esc(p.title)}" loading="lazy">` : placeholderSVG(p.category)}
-        <span class="pill"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
+        <span class="pill" style="position:absolute;bottom:12px;left:12px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.12)"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
         ${p.photo_count > 1 ? `<span class="pill" style="position:absolute;bottom:12px;right:12px;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.12)">${p.photo_count} fotos</span>` : ''}
       </div>
       <div class="stack">
