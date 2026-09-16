@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Producto — venta.hogar</title>
+<title>Producto — Oferta de Muebles y Electrodomésticos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
@@ -11,9 +11,9 @@
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/">venta.hogar</a>
+  <a class="brand" href="/">Oferta de Muebles y Electrodomésticos</a>
   <a href="/">Catálogo</a>
-  <a href="/admin.html">Acceso equipo</a>
+  <a href="/admin.html">Administración</a>
 </nav>
 
 <main>
@@ -56,7 +56,7 @@ async function cargar() {
   if (error || !p) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
   (st || []).forEach((r) => { ajustes[r.key] = r.value === true; });
   prod = p; fotos = f || []; metodos = (m || []).map((x) => METODOS[x.method] || x.method);
-  document.title = p.title + ' — venta.hogar';
+  document.title = p.title + ' — Oferta de Muebles y Electrodomésticos';
   pintar();
 }
 
