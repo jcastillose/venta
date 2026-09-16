@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Producto — venta.hogar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/src/app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">venta.hogar</a>
+  <a href="/">Catálogo</a>
+  <a href="/admin.html">Acceso equipo</a>
+</nav>
+
+<main>
+  <div style="padding-top:20px"><a class="btn btn-ghost" href="/" id="volver">Catálogo</a></div>
+  <div id="detalle"><p class="spinner">Cargando producto…</p></div>
+</main>
+
+<dialog id="dlg-interes">
+  <form class="sheet" id="form-interes">
+    <div class="title" id="dlg-titulo">Me interesa</div>
+    <p id="dlg-bajada"></p>
+    <label class="field">Tu nombre<input name="nombre" required autocomplete="name"></label>
+    <label class="field">Correo o WhatsApp<input name="contacto" required placeholder="+56 9 … o tu@correo.cl"></label>
+    <label class="field">Mensaje (opcional)<textarea name="mensaje" rows="3" placeholder="¿Cuándo podrías retirar? ¿Alguna duda?"></textarea></label>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="cancelar">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Marcar interés</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { sb, clp, esc, fecha, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, guardarToken, misTokens, ICON, METODOS } from '/src/supabase.js';
+
+const id = (location.pathname.match(/^\/p\/(.+)$/)?.[1]) || new URLSearchParams(location.search).get('id');
+const cont = document.getElementById('detalle');
+document.getElementById('volver').insertAdjacentHTML('afterbegin', ICON.back);
+
+let prod, fotos = [], idx = 0, metodos = [];
+
+async function cargar() {
+  if (!id) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
+  const [{ data: p, error }, { data: f }, { data: m }] = await Promise.all([
+    sb.from('catalog').select('*').eq('id', id).single(),
+    sb.from('product_photos').select('storage_path,position').eq('product_id', id).order('position'),
+    sb.from('payment_options').select('method'),
+  ]);
+  if (error || !p) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
+  prod = p; fotos = f || []; metodos = (m || []).map((x) => METODOS[x.method] || x.method);
+  document.title = p.title + ' — venta.hogar';
+  pintar();
+}
+
+function metodosTexto() {
+  if (!metodos.length) return 'los medios de pago del equipo';
+  return metodos.length > 1
+    ? metodos.slice(0, -1).join(', ') + ' o ' + metodos.at(-1).toLowerCase()
+    : metodos[0];
+}
+
+function pintar() {
+  const p = prod;
+  const yaTengo = misTokens().find((t) => t.productId === p.id);
+  const foto = fotoUrl(fotos[idx]?.storage_path);
+  const n = p.interested_count || 0;
+
+  cont.innerHTML = `<section class="detail">
+    <div class="gallery">
+      <div class="main">
+        ${foto ? `<img src="${foto}" alt="${esc(p.title)}">` : placeholderSVG(p.category)}
+      </div>
+      ${fotos.length > 1 ? `<div class="strip">${fotos.map((f, i) => {
+        const u = fotoUrl(f.storage_path);
+        return `<button type="button" data-i="${i}" ${i === idx ? 'aria-current="true"' : ''} aria-label="Foto ${i + 1}"><img src="${u}" alt=""></button>`;
+      }).join('')}</div>` : ''}
+    </div>
+    <div style="display:grid;gap:18px;align-content:start;padding-top:6px">
+      <span class="kicker">${esc(p.category)} · ${esc(p.published_by || '')}</span>
+      <h2>${esc(p.title)}</h2>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span class="price-lg" ${p.status === 'vendido' ? 'style="text-decoration:line-through"' : ''}>${clp(p.price_clp)}</span>
+        <span class="pill" style="border:1px solid var(--line);background:transparent"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
+      </div>
+      <p style="font-size:15px;line-height:1.65;max-width:52ch;margin:0;color:var(--ink-2)">${esc(p.description).replace(/\n/g, '<br>')}</p>
+      <div class="specs">
+        <div><span class="k">Retiro</span>${esc(p.lugar || '—')}</div>
+        <div><span class="k">Condición</span>${esc(p.condicion || '—')}</div>
+        <div><span class="k">Publicado</span>${fecha(p.created_at)}</div>
+      </div>
+      <div id="cta" style="display:grid;gap:12px"></div>
+    </div>
+  </section>`;
+
+  cont.querySelectorAll('.strip button').forEach((b) => b.onclick = () => { idx = +b.dataset.i; pintar(); });
+
+  const cta = document.getElementById('cta');
+  if (p.status === 'vendido') {
+    cta.innerHTML = `<p class="lead">Este producto ya fue vendido. Sigue visible como referencia de precio.</p>`;
+  } else if (yaTengo) {
+    cta.innerHTML = `<p class="lead">Ya marcaste tu interés en este producto.</p>
+      <div><a class="btn btn-primary" href="/c/${esc(yaTengo.token)}">${ICON.chat}Abrir conversación</a></div>`;
+  } else {
+    cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. El precio es fijo: marcar interés equivale a pedir la reserva y abre una conversación privada con quien vende.</p>
+      <p class="lead" style="display:inline-flex;align-items:center;gap:8px">${ICON.card}Al reservar pagas con ${esc(metodosTexto())}.</p>
+      <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}Me interesa</button></div>`;
+    document.getElementById('btn-interes').onclick = abrir;
+  }
+}
+
+const dlg = document.getElementById('dlg-interes');
+const form = document.getElementById('form-interes');
+document.getElementById('cancelar').onclick = () => dlg.close();
+
+function abrir() {
+  document.getElementById('dlg-titulo').textContent = 'Me interesa: ' + prod.title;
+  document.getElementById('dlg-bajada').textContent =
+    `Precio fijo ${clp(prod.price_clp)}. Déjanos cómo contactarte; la conversación queda abierta en un enlace privado.`;
+  dlg.showModal();
+}
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = form.querySelector('[type=submit]');
+  btn.disabled = true;
+  const fd = new FormData(form);
+  const { data, error } = await sb.rpc('create_interest', {
+    p_product: prod.id,
+    p_name: fd.get('nombre').trim(),
+    p_contact: fd.get('contacto').trim(),
+    p_message: (fd.get('mensaje') || '').trim() || null,
+  });
+  btn.disabled = false;
+  if (error) return fail(error);
+
+  const token = data;
+  guardarToken(token, prod.title);
+  const all = JSON.parse(localStorage.getItem('vh.tokens'));
+  all[0].productId = prod.id;
+  localStorage.setItem('vh.tokens', JSON.stringify(all));
+  dlg.close();
+  toast('Registramos tu interés. Te llevamos a tu conversación.');
+  setTimeout(() => location.assign('/c/' + token), 900);
+};
+
+cargar();
+</script>
+</body>
+</html>

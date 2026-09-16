@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>venta.hogar — muebles, electrodomésticos y electrónica</title>
+<meta name="description" content="Catálogo de muebles, electrodomésticos y electrónica de hogar. Precio fijo y trato directo con quien vende.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/src/app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">venta.hogar</a>
+  <a href="/" aria-current="page">Catálogo</a>
+  <a href="#" id="mis-hilos" class="hide">Mis conversaciones</a>
+  <a href="/admin.html">Acceso equipo</a>
+</nav>
+
+<main>
+  <section class="section-head">
+    <div>
+      <h1>Catálogo</h1>
+      <p class="lead" id="resumen">Cargando…</p>
+    </div>
+    <div class="tabs" id="filtros"></div>
+  </section>
+  <div id="grid" class="grid"></div>
+  <p id="vacio" class="spinner hide">No hay productos en esta categoría por ahora.</p>
+</main>
+
+<dialog id="dlg-hilos">
+  <form class="sheet" method="dialog">
+    <div class="title">Mis conversaciones</div>
+    <p>Los hilos que abriste desde este navegador.</p>
+    <div id="hilos-lista" style="display:grid;gap:8px"></div>
+    <div class="actions"><button class="btn btn-secondary" value="cancel">Cerrar</button></div>
+  </form>
+</dialog>
+
+<script type="module">
+import { sb, clp, esc, CATEGORIAS, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, misTokens } from '/src/supabase.js';
+
+const grid = document.getElementById('grid');
+const filtros = document.getElementById('filtros');
+let cat = new URLSearchParams(location.search).get('cat') || 'Todo';
+let verVendidos = true;
+let items = [];
+
+const hilos = misTokens();
+if (hilos.length) {
+  const link = document.getElementById('mis-hilos');
+  link.classList.remove('hide');
+  link.onclick = (e) => {
+    e.preventDefault();
+    document.getElementById('hilos-lista').innerHTML = hilos
+      .map((h) => `<a class="btn btn-secondary btn-block" href="/c/${esc(h.token)}">${esc(h.title || 'Ver hilo')}</a>`).join('');
+    document.getElementById('dlg-hilos').showModal();
+  };
+}
+
+function pintarFiltros() {
+  filtros.innerHTML = ['Todo', ...CATEGORIAS]
+    .map((c) => `<button type="button" role="tab" aria-selected="${c === cat}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')
+    + `<label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding-left:22px;border-left:1px solid var(--line);padding-bottom:6px;color:var(--muted)">
+        <input type="checkbox" id="chk-vendidos" ${verVendidos ? 'checked' : ''}> Mostrar vendidos</label>`;
+  filtros.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { cat = b.dataset.cat; pintarFiltros(); pintar(); });
+  filtros.querySelector('#chk-vendidos').onchange = (e) => { verVendidos = e.target.checked; pintar(); };
+}
+
+const orden = { disponible: 0, reservado: 1, vendido: 2 };
+
+function pintar() {
+  const lista = items
+    .filter((p) => (cat === 'Todo' || p.category === cat) && (verVendidos || p.status !== 'vendido'))
+    .sort((a, b) => orden[a.status] - orden[b.status] || new Date(b.created_at) - new Date(a.created_at));
+
+  document.getElementById('vacio').classList.toggle('hide', lista.length > 0);
+  grid.innerHTML = lista.map((p) => {
+    const foto = fotoUrl(p.cover);
+    const n = p.interested_count || 0;
+    return `<a class="card ${p.status === 'vendido' ? 'sold' : ''}" href="/p/${p.id}">
+      <div class="thumb">
+        ${foto ? `<img src="${foto}" alt="${esc(p.title)}" loading="lazy">` : placeholderSVG(p.category)}
+        <span class="pill"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
+        ${p.photo_count > 1 ? `<span class="pill" style="position:absolute;bottom:12px;right:12px;color:var(--muted)">${p.photo_count} fotos</span>` : ''}
+      </div>
+      <div class="stack">
+        <div class="titles"><span>${esc(p.title)}</span><span class="price">${clp(p.price_clp)}</span></div>
+        <div class="meta">${esc(p.category)} · ${esc(p.published_by || '')}</div>
+        <div class="meta" style="color:var(--accent);font-weight:600;margin-top:4px">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}</div>
+      </div>
+    </a>`;
+  }).join('');
+}
+
+async function cargar() {
+  grid.innerHTML = '<p class="spinner">Cargando catálogo…</p>';
+  const { data, error } = await sb.from('catalog').select('*').order('created_at', { ascending: false });
+  if (error) { grid.innerHTML = ''; return fail(error); }
+
+  const ids = data.map((p) => p.id);
+  const fotos = ids.length
+    ? (await sb.from('product_photos').select('product_id,storage_path,position').in('product_id', ids).order('position')).data || []
+    : [];
+  items = data.map((p) => {
+    const f = fotos.filter((x) => x.product_id === p.id);
+    return { ...p, cover: f[0]?.storage_path, photo_count: f.length };
+  });
+
+  const vendedores = new Set(items.map((p) => p.published_by)).size;
+  document.getElementById('resumen').textContent =
+    `${items.length} productos · ${vendedores} ${vendedores === 1 ? 'vendedor' : 'vendedores'} · precio fijo, trato directo con quien vende`;
+  pintar();
+}
+
+pintarFiltros();
+cargar();
+
+sb.channel('catalogo')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, cargar)
+  .subscribe();
+</script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mi conversación — venta.hogar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/src/app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">venta.hogar</a>
+  <a href="/">Catálogo</a>
+</nav>
+
+<main>
+  <div id="cont"><p class="spinner">Abriendo tu conversación…</p></div>
+</main>
+
+<dialog id="dlg-pago">
+  <form class="sheet" id="form-pago">
+    <div class="stack">
+      <span class="kicker" id="pago-producto"></span>
+      <div class="price-lg" id="pago-monto"></div>
+    </div>
+    <p>Elige cómo pagar, transfiere con los datos que aparecen y avisa el pago. Quien vende lo confirma y el producto queda cerrado a tu nombre.</p>
+    <div id="pago-opciones" style="display:grid;gap:10px"></div>
+    <label class="field">N° de comprobante o referencia (opcional)<input name="ref" placeholder="Ej. 8842019"></label>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="pago-cancelar">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Ya pagué, avisar</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { sb, clp, esc, hora, ESTADO_INTERES, ESTADO_PAGO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, METODOS, ICON, guardarToken } from '/src/supabase.js';
+
+const token = (location.pathname.match(/^\/c\/(.+)$/)?.[1]) || new URLSearchParams(location.search).get('t');
+const cont = document.getElementById('cont');
+let hilo, mensajes = [], cover = null, opciones = [];
+
+async function cargar() {
+  if (!token) { cont.innerHTML = '<p class="spinner">Enlace inválido.</p>'; return; }
+  const { data, error } = await sb.rpc('thread_by_token', { p_token: token });
+  const t = Array.isArray(data) ? data[0] : data;
+  if (error || !t) { cont.innerHTML = '<p class="spinner">Este enlace no corresponde a ninguna conversación.</p>'; return; }
+  hilo = t;
+  guardarToken(token, t.product_title);
+
+  const [{ data: ms }, { data: fs }, { data: op }] = await Promise.all([
+    sb.rpc('messages_by_token', { p_token: token }),
+    sb.from('product_photos').select('storage_path').eq('product_id', t.product_id).order('position').limit(1),
+    sb.rpc('payment_options_by_token', { p_token: token }),
+  ]);
+  mensajes = ms || [];
+  cover = fs?.[0]?.storage_path || null;
+  opciones = op || [];
+  pintar();
+}
+
+function pagoEstado() {
+  if (!hilo.payment_status) return hilo.interest_status === 'reservado' ? 'pendiente' : null;
+  return hilo.payment_status;
+}
+
+function franjaPago() {
+  const st = pagoEstado();
+  if (!st) return '';
+  const metodo = hilo.payment_method ? (METODOS[hilo.payment_method] || hilo.payment_method) : null;
+  const ref = hilo.payment_reference ? ` · ref. ${esc(hilo.payment_reference)}` : '';
+  if (st === 'pagado') {
+    return franja('note-ok', 'var(--verde)', 'Pago confirmado',
+      `${clp(hilo.price_clp)} por ${esc(metodo)}${ref}. El producto quedó cerrado a tu nombre.`);
+  }
+  if (st === 'porconfirmar') {
+    return franja('note-warn', 'var(--ambar)', 'Pago avisado',
+      `Avisaste el pago por ${esc(metodo)}${ref}. Falta que quien vende lo confirme.`);
+  }
+  return franja('note-ok', 'var(--accent)', 'Reserva confirmada',
+    `Paga ${clp(hilo.price_clp)} para cerrar la entrega.`,
+    `<button class="btn btn-primary" id="btn-pagar">${ICON.card}Pagar ${clp(hilo.price_clp)}</button>`);
+}
+
+const franja = (cls, dot, title, body, cta = '') => `
+  <div class="note ${cls} strip-pay" style="max-width:780px;margin-top:14px">
+    <div class="txt">
+      <span class="state" style="color:inherit"><span class="dot" style="background:${dot}"></span>${title}</span>
+      <span style="font-size:13.5px;line-height:1.55;color:var(--ink-2)">${body}</span>
+    </div>${cta}
+  </div>`;
+
+function pintar() {
+  const foto = fotoUrl(cover);
+  cont.innerHTML = `
+    <div style="padding-top:20px"><a class="btn btn-ghost" href="/p/${hilo.product_id}">${ICON.back}Ver el producto</a></div>
+    <section class="chat" style="margin-top:16px">
+      <header>
+        ${foto ? `<img class="mini" src="${foto}" alt="">` : `<div class="mini"></div>`}
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:15px;font-weight:600;letter-spacing:-.01em;line-height:1.2">${esc(hilo.product_title)}</div>
+          <div class="sub" style="font-size:12.5px;color:var(--muted)">${esc(hilo.published_by)} · ${clp(hilo.price_clp)}</div>
+        </div>
+        ${estadoHTML(ESTADO_INTERES, hilo.interest_status)}
+      </header>
+      <div class="log" id="log">
+        <p class="sys">Conversación privada entre ${esc(hilo.buyer_name)} y ${esc(hilo.published_by)} sobre este producto.</p>
+        ${mensajes.map((m) => `
+          <div class="msg ${m.sender === 'interesado' ? 'mine' : ''}">
+            <div class="bubble">${esc(m.body)}</div>
+            <span class="when">${m.sender === 'interesado' ? esc(hilo.buyer_name.split(' ')[0]) : esc(hilo.published_by.split(' ')[0])} · ${hora(m.created_at)}</span>
+          </div>`).join('')}
+      </div>
+      <form id="form-msg">
+        <input name="body" placeholder="Escribe un mensaje…" aria-label="Mensaje" autocomplete="off" required>
+        <button type="submit" aria-label="Enviar">${ICON.send}</button>
+      </form>
+    </section>
+    ${franjaPago()}`;
+
+  const log = document.getElementById('log');
+  log.scrollTop = log.scrollHeight;
+  document.getElementById('btn-pagar')?.addEventListener('click', abrirPago);
+
+  document.getElementById('form-msg').onsubmit = async (e) => {
+    e.preventDefault();
+    const input = e.target.body;
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    const { error } = await sb.rpc('send_message_by_token', { p_token: token, p_body: body });
+    if (error) return fail(error);
+    cargar();
+  };
+}
+
+const dlg = document.getElementById('dlg-pago');
+document.getElementById('pago-cancelar').onclick = () => dlg.close();
+
+function abrirPago() {
+  document.getElementById('pago-producto').textContent = hilo.product_title;
+  document.getElementById('pago-monto').textContent = clp(hilo.price_clp);
+  document.getElementById('pago-opciones').innerHTML = opciones.map((o, i) => `
+    <label class="choice">
+      <span class="head">
+        <input type="radio" name="metodo" value="${esc(o.method)}" ${i === 0 ? 'checked' : ''}>
+        <span class="mark"></span>
+        <span class="stack"><b>${esc(METODOS[o.method] || o.method)}</b></span>
+      </span>
+      <span class="data">${Object.entries(o.details || {}).map(([k, v]) =>
+        `<div><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('')}</span>
+    </label>`).join('') || '<p class="lead">El equipo todavía no publicó sus datos de cobro. Pregúntale por el chat.</p>';
+  dlg.showModal();
+}
+
+document.getElementById('form-pago').onsubmit = async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  const { error } = await sb.rpc('declare_payment_by_token', {
+    p_token: token,
+    p_method: fd.get('metodo'),
+    p_reference: (fd.get('ref') || '').trim() || null,
+  });
+  btn.disabled = false;
+  if (error) return fail(error);
+  dlg.close();
+  toast('Pago avisado. Queda por confirmar.');
+  cargar();
+};
+
+cargar();
+setInterval(cargar, 20000);
+</script>
+</body>
+</html>

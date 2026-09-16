@@ -1,0 +1,23 @@
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Hilo privado de cada interesado: /c/<token>
+[[redirects]]
+  from = "/c/*"
+  to = "/c.html"
+  status = 200
+
+# Detalle de producto: /p/<id>
+[[redirects]]
+  from = "/p/*"
+  to = "/producto.html"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"

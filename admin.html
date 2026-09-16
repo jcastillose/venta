@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Equipo — venta.hogar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/src/app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">venta.hogar</a>
+  <a href="/">Catálogo</a>
+  <span id="nav-tabs" class="hide" style="display:flex;gap:28px"></span>
+  <span id="nav-me" class="hide" style="margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted)"></span>
+</nav>
+
+<main id="view"><p class="spinner">Cargando…</p></main>
+
+<dialog id="dlg-invitar">
+  <form class="sheet" id="form-invitar">
+    <div class="title">Invitar a una persona</div>
+    <p>Le enviamos un enlace de acceso a su correo. Podrá publicar y editar todos los productos del equipo.</p>
+    <label class="field">Nombre<input name="name" required placeholder="Ej. Rocío Soto"></label>
+    <label class="field">Correo<input name="email" type="email" required placeholder="nombre@correo.cl"></label>
+    <label class="field">Rol<select name="role">
+      <option value="editor">Editor · productos y conversaciones</option>
+      <option value="admin">Administradora · también cuentas y cobros</option>
+    </select></label>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" data-close>Cancelar</button>
+      <button type="submit" class="btn btn-primary">Enviar invitación</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { sb, SITE_URL, clp, esc, fecha, hora, CATEGORIAS, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
+         estadoHTML, fotoUrl, fail, toast, ICON } from '/src/supabase.js';
+
+const view = document.getElementById('view');
+let me = null, vista = 'productos', ctx = {};
+let productos = [], fotosPorProducto = {}, intereses = [], pagos = [], cobroCfg = [], equipo = [];
+
+/* ── sesión ─────────────────────────────────────────────────────── */
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return login();
+  const { data, error } = await sb.from('members').select('*').eq('id', session.user.id).single();
+  if (error || !data) return sinCuenta(session.user.email);
+  if (data.status !== 'activo') return suspendida(data);
+  me = data;
+  sb.from('members').update({ last_seen: new Date().toISOString() }).eq('id', me.id);
+  navegar();
+  await cargar();
+  render();
+}
+
+function login() {
+  document.getElementById('nav-tabs').classList.add('hide');
+  view.innerHTML = `<section class="center">
+    <form class="panel" id="form-login" style="width:min(420px,100%);padding:32px;gap:16px">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--accent-wash);display:grid;place-items:center;color:var(--accent)">${ICON.login}</div>
+      <h2 style="font-size:26px">Acceso equipo</h2>
+      <p class="lead">Entra con el correo de tu cuenta. Te enviamos un enlace de acceso; no hace falta contraseña.</p>
+      <label class="field">Correo<input name="email" type="email" required autocomplete="email"></label>
+      <button class="btn btn-primary btn-block">Enviarme el enlace</button>
+      <div id="login-msg"></div>
+    </form>
+  </section>`;
+  document.getElementById('form-login').onsubmit = async (e) => {
+    e.preventDefault();
+    const email = new FormData(e.target).get('email').trim();
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: SITE_URL + '/admin.html' } });
+    btn.disabled = false;
+    if (error) return fail(error);
+    document.getElementById('login-msg').innerHTML =
+      `<div class="note note-ok">Listo. Revisa <strong>${esc(email)}</strong> y abre el enlace para entrar.</div>`;
+  };
+}
+
+const salir = async () => { await sb.auth.signOut(); location.reload(); };
+
+function sinCuenta(email) {
+  view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
+    <h3>Tu correo no tiene cuenta en el equipo</h3>
+    <p class="lead">${esc(email)} entró correctamente, pero no hay una cuenta asociada. Pídele a una administradora que te invite.</p>
+    <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
+  document.getElementById('salir').onclick = salir;
+}
+function suspendida(m) {
+  view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
+    <h3>Cuenta ${esc(m.status)}</h3>
+    <p class="lead">Tu acceso está ${esc(m.status)}. Una administradora puede reactivarlo desde la pantalla Equipo.</p>
+    <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
+  document.getElementById('salir').onclick = salir;
+}
+
+function navegar() {
+  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo']];
+  const nav = document.getElementById('nav-tabs');
+  nav.classList.remove('hide');
+  nav.innerHTML = tabs.map(([k, l]) => {
+    const badge = k === 'interesados' ? intereses.filter((i) => i.status === 'nuevo').length
+      : k === 'cobros' ? pagos.filter((p) => p.status === 'porconfirmar').length : 0;
+    return `<a href="#${k}" ${vista === k ? 'aria-current="page"' : ''} data-go="${k}">${l}${badge ? ` <span style="background:${k === 'cobros' ? 'var(--ambar)' : 'var(--accent)'};color:#fff;font-size:10.5px;font-weight:700;min-width:18px;height:18px;border-radius:999px;display:inline-grid;place-content:center;padding:0 5px">${badge}</span>` : ''}</a>`;
+  }).join('');
+  nav.querySelectorAll('[data-go]').forEach((a) => a.onclick = (e) => { e.preventDefault(); ir(a.dataset.go); });
+
+  const mine = document.getElementById('nav-me');
+  mine.classList.remove('hide');
+  mine.innerHTML = `<span style="font-size:12.5px">${esc(me.name)} · ${me.role === 'admin' ? 'Administradora' : 'Editor'}</span>
+    <button class="btn btn-secondary" id="btn-salir" style="padding:7px 12px;font-size:12.5px">Salir</button>`;
+  document.getElementById('btn-salir').onclick = salir;
+}
+
+function ir(v, c = {}) { vista = v; ctx = c; navegar(); render(); window.scrollTo(0, 0); }
+
+/* ── datos ──────────────────────────────────────────────────────── */
+async function cargar() {
+  const [p, f, i, y, s, m] = await Promise.all([
+    sb.from('products').select('*').order('created_at', { ascending: false }),
+    sb.from('product_photos').select('*').order('position'),
+    sb.from('interests').select('*').order('created_at', { ascending: false }),
+    sb.from('payments').select('*'),
+    sb.from('payment_settings').select('*'),
+    sb.from('members').select('*').order('created_at'),
+  ]);
+  if (p.error) return fail(p.error);
+  productos = p.data || [];
+  fotosPorProducto = {};
+  (f.data || []).forEach((x) => (fotosPorProducto[x.product_id] ||= []).push(x));
+  intereses = i.data || []; pagos = y.data || []; cobroCfg = s.data || []; equipo = m.data || [];
+  navegar();
+}
+const recargar = async () => { await cargar(); render(); };
+
+const prod = (id) => productos.find((p) => p.id === id);
+const pago = (interestId) => pagos.find((p) => p.interest_id === interestId);
+const nombreDe = (id) => equipo.find((u) => u.id === id)?.name || '—';
+const fotos = (id) => fotosPorProducto[id] || [];
+const nInteresados = (id) => intereses.filter((i) => i.product_id === id).length;
+
+/* ── router ─────────────────────────────────────────────────────── */
+function render() {
+  ({ productos: vProductos, editor: vEditor, interesados: vInteresados,
+     chat: vChat, cobros: vCobros, equipo: vEquipo }[vista] || vProductos)();
+}
+
+/* ── productos ──────────────────────────────────────────────────── */
+function vProductos() {
+  const cuenta = (st) => productos.filter((p) => p.status === st).length;
+  view.innerHTML = `
+    <section class="section-head">
+      <div class="stack">
+        <span class="kicker">${esc(me.name)} · ${me.role === 'admin' ? 'Administradora' : 'Editor'}</span>
+        <h2>Productos del equipo</h2>
+        <p class="lead">Cualquier cuenta activa puede editar y cambiar el estado de todos los productos.</p>
+      </div>
+      <button class="btn btn-primary" id="nuevo">${ICON.plus}Publicar producto</button>
+    </section>
+    <div class="stats">
+      ${[['Disponibles', cuenta('disponible'), 'var(--verde)'], ['Reservados', cuenta('reservado'), 'var(--ambar)'],
+         ['Vendidos', cuenta('vendido'), 'var(--gris)'], ['Interesados', intereses.length, 'var(--accent)']]
+        .map(([l, n, c]) => `<div class="stat"><span class="state"><span class="dot" style="background:${c}"></span>${l}</span><b>${n}</b></div>`).join('')}
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Producto</th><th>Precio</th><th>Estado</th><th>Publicado por</th><th>Interesados</th><th></th></tr></thead>
+      <tbody>${productos.map((p) => {
+        const f = fotoUrl(fotos(p.id)[0]?.storage_path);
+        return `<tr>
+          <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
+            <div class="stack"><strong>${esc(p.title)}</strong><span class="sub">${esc(p.category)} · ${fotos(p.id).length} fotos</span></div></div></td>
+          <td class="num">${clp(p.price_clp)}</td>
+          <td><div class="cellflex"><span class="dot" style="background:${ESTADO[p.status].color}"></span>
+            <select data-status="${p.id}">${Object.keys(ESTADO).map((k) =>
+              `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></div></td>
+          <td class="sub">${esc(nombreDe(p.created_by))}</td>
+          <td><button class="btn btn-ghost" style="color:var(--accent)" data-int="${p.id}">${nInteresados(p.id) || 'Sin'} interesados</button></td>
+          <td class="right"><button class="btn btn-secondary" data-edit="${p.id}">${ICON.edit}Editar</button></td>
+        </tr>`; }).join('')}</tbody>
+    </table>${productos.length ? '' : '<div class="empty" style="border:0">Aún no hay productos publicados.</div>'}</div>`;
+
+  document.getElementById('nuevo').onclick = () => ir('editor', { id: null });
+  view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => ir('editor', { id: b.dataset.edit }));
+  view.querySelectorAll('[data-int]').forEach((b) => b.onclick = () => ir('interesados', { productId: b.dataset.int }));
+  view.querySelectorAll('[data-status]').forEach((s) => s.onchange = async () => {
+    const { error } = await sb.from('products')
+      .update({ status: s.value, updated_at: new Date().toISOString(), updated_by: me.id })
+      .eq('id', s.dataset.status);
+    if (error) return fail(error);
+    toast('Estado actualizado');
+    recargar();
+  });
+}
+
+/* ── editor ─────────────────────────────────────────────────────── */
+function vEditor() {
+  const p = ctx.id ? prod(ctx.id) : { title: '', category: 'Muebles', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible' };
+  const fs = ctx.id ? fotos(ctx.id) : [];
+  view.innerHTML = `
+    <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}Productos</button></div>
+    <h2 style="margin:18px 0 32px">${ctx.id ? 'Editar producto' : 'Publicar producto'}</h2>
+    <section class="detail" style="gap:48px">
+      <div style="display:grid;gap:14px">
+        <span class="kicker">Fotografías</span>
+        ${ctx.id ? `<div class="photos">
+          ${fs.map((f, i) => `<div class="photo ${i === 0 ? 'cover' : ''}">
+            <img src="${fotoUrl(f.storage_path)}" alt="">
+            ${i === 0 ? '<span class="badge">Portada</span>' : ''}
+            <div class="tools">
+              ${i === 0 ? '' : `<button type="button" data-cover="${f.id}">Usar de portada</button>`}
+              <button type="button" data-del="${f.id}" data-path="${esc(f.storage_path)}" aria-label="Quitar foto" style="margin-left:auto;width:28px;height:28px;display:grid;place-items:center">${ICON.trash}</button>
+            </div></div>`).join('')}
+          <label class="dropzone">${ICON.plus}Añadir fotos
+            <input type="file" accept="image/*" multiple hidden id="subir"></label>
+        </div>
+        <p class="lead" style="font-size:12.5px">La portada es la foto que aparece en el catálogo. Se suben al bucket <code>fotos</code> de Supabase.</p>`
+        : '<p class="lead">Guarda el producto y podrás subir sus fotografías.</p>'}
+      </div>
+      <form class="form" id="form-prod">
+        <label class="field">Título<input name="title" required value="${esc(p.title)}" placeholder="Ej. Sofá 3 cuerpos gris"></label>
+        <div class="row">
+          <label class="field">Categoría<select name="category">${CATEGORIAS.map((c) =>
+            `<option ${p.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label class="field">Precio (CLP)<input name="price_clp" type="number" min="0" step="1000" required value="${p.price_clp}">
+            <span class="hint" id="precio-hint"></span></label>
+        </div>
+        <div class="row">
+          <label class="field">Lugar de retiro<input name="lugar" value="${esc(p.lugar || '')}" placeholder="Comuna, ciudad"></label>
+          <label class="field">Condición<input name="condicion" value="${esc(p.condicion || '')}" placeholder="Ej. Muy buen estado"></label>
+        </div>
+        <label class="field">Descripción<textarea name="description" rows="5" placeholder="Medidas, marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
+        <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
+          `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:8px">
+          <button class="btn btn-primary" style="padding:12px 20px;font-size:14px">${ctx.id ? 'Guardar cambios' : 'Publicar'}</button>
+          <button type="button" class="btn btn-secondary" style="padding:12px 20px;font-size:14px" id="cancelar">Cancelar</button>
+        </div>
+      </form>
+    </section>`;
+
+  document.getElementById('volver').onclick = () => ir('productos');
+  document.getElementById('cancelar').onclick = () => ir('productos');
+
+  const form = document.getElementById('form-prod');
+  const hint = document.getElementById('precio-hint');
+  const pintaHint = () => hint.textContent = 'Se mostrará como ' + clp(form.price_clp.value);
+  form.price_clp.oninput = pintaHint; pintaHint();
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(form));
+    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, updated_at: new Date().toISOString(), updated_by: me.id };
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    let error, id = ctx.id;
+    if (ctx.id) ({ error } = await sb.from('products').update(payload).eq('id', ctx.id));
+    else {
+      const r = await sb.from('products').insert({ ...payload, created_by: me.id }).select('id').single();
+      error = r.error; id = r.data?.id;
+    }
+    btn.disabled = false;
+    if (error) return fail(error);
+    await cargar();
+    toast(ctx.id ? 'Cambios guardados' : 'Producto publicado');
+    ir(ctx.id ? 'productos' : 'editor', { id });
+  };
+
+  document.getElementById('subir')?.addEventListener('change', async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    toast(`Subiendo ${files.length} ${files.length === 1 ? 'foto' : 'fotos'}…`);
+    let pos = fotos(ctx.id).length;
+    for (const file of files) {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `${ctx.id}/${crypto.randomUUID()}.${ext}`;
+      const up = await sb.storage.from('fotos').upload(path, file, { contentType: file.type, upsert: false });
+      if (up.error) { fail(up.error); continue; }
+      const ins = await sb.from('product_photos').insert({ product_id: ctx.id, storage_path: path, position: pos++ });
+      if (ins.error) fail(ins.error);
+    }
+    await cargar();
+    render();
+  });
+
+  view.querySelectorAll('[data-cover]').forEach((b) => b.onclick = async () => {
+    const fsNow = [...fotos(ctx.id)];
+    const i = fsNow.findIndex((f) => f.id === b.dataset.cover);
+    const [x] = fsNow.splice(i, 1);
+    const orden = [x, ...fsNow];
+    for (let k = 0; k < orden.length; k++) {
+      await sb.from('product_photos').update({ position: k }).eq('id', orden[k].id);
+    }
+    await cargar(); render();
+  });
+
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    await sb.storage.from('fotos').remove([b.dataset.path]);
+    const { error } = await sb.from('product_photos').delete().eq('id', b.dataset.del);
+    if (error) return fail(error);
+    await cargar(); render();
+  });
+}
+
+/* ── interesados ────────────────────────────────────────────────── */
+function vInteresados() {
+  const filtro = ctx.filtro || 'Todos';
+  const mapa = { 'Nuevos': 'nuevo', 'En conversación': 'conversando', 'Reservados': 'reservado' };
+  const lista = intereses
+    .filter((i) => !ctx.productId || i.product_id === ctx.productId)
+    .filter((i) => filtro === 'Todos' || i.status === mapa[filtro]);
+  const nuevos = intereses.filter((i) => i.status === 'nuevo').length;
+
+  view.innerHTML = `
+    <section class="section-head" style="padding-bottom:16px">
+      <div class="stack">
+        <span class="kicker">${intereses.length} ${intereses.length === 1 ? 'persona' : 'personas'} · ${nuevos} sin responder</span>
+        <h2>Interesados</h2>
+        <p class="lead">Un hilo privado por persona y por producto. Conversa, reserva a quien cierre primero y confirma el pago cuando llegue.</p>
+      </div>
+    </section>
+    <div class="tabs" style="padding-bottom:8px">
+      ${['Todos', 'Nuevos', 'En conversación', 'Reservados'].map((f) =>
+        `<button type="button" role="tab" aria-selected="${f === filtro}" data-f="${esc(f)}">${f}</button>`).join('')}
+      ${ctx.productId ? `<button class="btn btn-secondary" id="quitar-filtro" style="margin-bottom:6px;padding:5px 10px;font-size:12.5px">${esc(prod(ctx.productId)?.title || '')} ✕</button>` : ''}
+    </div>
+    <div class="list">${lista.map((i) => {
+      const p = prod(i.product_id) || {};
+      const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+      const y = pago(i.id);
+      const pagoSt = y ? y.status : (i.status === 'reservado' ? 'pendiente' : null);
+      return `<article>
+        ${f ? `<img class="avatar" src="${f}" alt="">` : '<div class="avatar"></div>'}
+        <div class="body">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <strong style="font-size:15px">${esc(i.buyer_name)}</strong>
+            ${estadoHTML(ESTADO_INTERES, i.status)}
+            ${pagoSt ? `<span style="border-left:1px solid var(--line);padding-left:10px">${estadoHTML(ESTADO_PAGO, pagoSt)}</span>` : ''}
+            <span class="sub" style="color:var(--faint)">${fecha(i.created_at)}</span>
+          </div>
+          <div class="sub">${esc(p.title || '')} · ${esc(i.buyer_contact)}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${i.status !== 'reservado' && i.status !== 'vendido' && p.status !== 'vendido'
+            ? `<button class="btn btn-secondary" data-res="${i.id}">Reservar</button>` : ''}
+          <button class="btn btn-primary" data-chat="${i.id}">${ICON.chat}Conversar</button>
+        </div>
+      </article>`; }).join('')}
+      ${lista.length ? '' : '<div class="empty" style="margin-top:16px">Nadie por aquí todavía. Cuando alguien marque interés aparecerá en esta bandeja.</div>'}
+    </div>`;
+
+  view.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => ir('interesados', { ...ctx, filtro: b.dataset.f }));
+  document.getElementById('quitar-filtro')?.addEventListener('click', () => ir('interesados', { filtro }));
+  view.querySelectorAll('[data-chat]').forEach((b) => b.onclick = () => ir('chat', { interestId: b.dataset.chat, back: 'interesados' }));
+  view.querySelectorAll('[data-res]').forEach((b) => b.onclick = async () => {
+    const { error } = await sb.rpc('close_deal', { p_interest: b.dataset.res, p_status: 'reservado' });
+    if (error) return fail(error);
+    toast('Reservado'); recargar();
+  });
+}
+
+/* ── chat del equipo ────────────────────────────────────────────── */
+async function vChat() {
+  const i = intereses.find((x) => x.id === ctx.interestId);
+  if (!i) return ir('interesados');
+  const p = prod(i.product_id) || {};
+  const y = pago(i.id);
+  const { data: ms } = await sb.from('messages').select('*').eq('interest_id', i.id).order('created_at');
+  const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+  const metodo = y ? (METODOS[y.method] || y.method) : null;
+  const ref = y?.reference ? ` · ref. ${esc(y.reference)}` : '';
+
+  let franja = '';
+  if (y?.status === 'pagado') {
+    franja = nota('note-ok', 'var(--verde)', 'Pago confirmado',
+      `${clp(y.amount_clp)} por ${esc(metodo)}${ref}. Confirmado ${fecha(y.confirmed_at)}`);
+  } else if (y?.status === 'porconfirmar') {
+    franja = nota('note-warn', 'var(--ambar)', 'Pago por confirmar',
+      `${esc(i.buyer_name.split(' ')[0])} avisó un pago de ${clp(y.amount_clp)} por ${esc(metodo)}${ref} (${fecha(y.declared_at)}).`,
+      `<button class="btn btn-primary" id="btn-confirmar">${ICON.check}Confirmar pago recibido</button>`);
+  } else if (i.status === 'reservado') {
+    franja = nota('note-warn', 'var(--ambar)', 'Pago pendiente',
+      `${esc(i.buyer_name.split(' ')[0])} ya puede pagar desde su enlace privado. Los datos de cobro se muestran ahí.`);
+  }
+
+  const acciones = (i.status !== 'vendido' && p.status !== 'vendido')
+    ? `<div style="max-width:780px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:18px 2px">
+        <span class="lead" style="margin-right:auto">Cerrar el trato con ${esc(i.buyer_name)}:</span>
+        ${i.status !== 'reservado' ? `<button class="btn btn-secondary" id="btn-reservar">Reservar</button>` : ''}
+        <button class="btn btn-primary" id="btn-vender">${ICON.check}Marcar vendido</button>
+      </div>` : '';
+
+  view.innerHTML = `
+    <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}${ctx.back === 'cobros' ? 'Cobros' : 'Interesados'}</button></div>
+    <section class="chat" style="margin-top:16px">
+      <header>
+        ${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:15px;font-weight:600;letter-spacing:-.01em">${esc(p.title || '')}</div>
+          <div class="sub">${esc(i.buyer_name)} · ${esc(i.buyer_contact)} · ${clp(p.price_clp)}</div>
+        </div>
+        ${estadoHTML(ESTADO_INTERES, i.status)}
+      </header>
+      <div class="log" id="log">
+        <p class="sys">Conversación privada con ${esc(i.buyer_name)} sobre este producto.</p>
+        ${(ms || []).map((m) => `<div class="msg ${m.sender === 'vendedor' ? 'mine' : ''}">
+          <div class="bubble">${esc(m.body)}</div>
+          <span class="when">${m.sender === 'vendedor' ? esc(nombreDe(p.created_by).split(' ')[0]) : esc(i.buyer_name.split(' ')[0])} · ${hora(m.created_at)}</span>
+        </div>`).join('')}
+      </div>
+      <form id="form-msg"><input name="body" placeholder="Escribe un mensaje…" aria-label="Mensaje" autocomplete="off" required>
+        <button type="submit" aria-label="Enviar">${ICON.send}</button></form>
+    </section>
+    ${franja}${acciones}
+    <p class="lead" style="max-width:780px;margin-top:14px;font-size:12.5px">Enlace privado de esta persona: <code>${esc(location.origin)}/c/${esc(i.token)}</code></p>`;
+
+  document.getElementById('volver').onclick = () => ir(ctx.back || 'interesados');
+  const log = document.getElementById('log'); log.scrollTop = log.scrollHeight;
+
+  document.getElementById('form-msg').onsubmit = async (e) => {
+    e.preventDefault();
+    const input = e.target.body, body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    const { error } = await sb.from('messages').insert({ interest_id: i.id, sender: 'vendedor', body });
+    if (error) return fail(error);
+    if (i.status === 'nuevo') await sb.from('interests').update({ status: 'conversando' }).eq('id', i.id);
+    await cargar(); render();
+  };
+  document.getElementById('btn-reservar')?.addEventListener('click', async () => {
+    const { error } = await sb.rpc('close_deal', { p_interest: i.id, p_status: 'reservado' });
+    if (error) return fail(error);
+    toast('Reservado'); await cargar(); render();
+  });
+  document.getElementById('btn-vender')?.addEventListener('click', async () => {
+    const { error } = await sb.rpc('close_deal', { p_interest: i.id, p_status: 'vendido' });
+    if (error) return fail(error);
+    toast('Marcado como vendido'); await cargar(); render();
+  });
+  document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
+    const { error } = await sb.rpc('confirm_payment', { p_interest: i.id });
+    if (error) return fail(error);
+    toast('Pago confirmado. Producto vendido.'); await cargar(); render();
+  });
+}
+
+const nota = (cls, dot, title, body, cta = '') => `
+  <div class="note ${cls} strip-pay" style="max-width:780px;margin-top:14px">
+    <div class="txt"><span class="state" style="color:inherit"><span class="dot" style="background:${dot}"></span>${title}</span>
+      <span style="font-size:13.5px;line-height:1.55;color:var(--ink-2)">${body}</span></div>${cta}</div>`;
+
+/* ── cobros ─────────────────────────────────────────────────────── */
+function vCobros() {
+  const filas = intereses.filter((i) => i.status === 'reservado' || i.status === 'vendido');
+  const recaudado = pagos.filter((p) => p.status === 'pagado').reduce((a, p) => a + p.amount_clp, 0);
+  const porConfirmar = pagos.filter((p) => p.status === 'porconfirmar').length;
+  const activos = cobroCfg.filter((c) => c.enabled).map((c) => METODOS[c.method] || c.method);
+
+  view.innerHTML = `
+    <section class="section-head" style="padding-bottom:20px">
+      <div class="stack">
+        <span class="kicker">${clp(recaudado)} recibidos · ${porConfirmar} por confirmar</span>
+        <h2>Cobros</h2>
+        <p class="lead" style="max-width:60ch">Quien reserva paga con ${esc(activos.join(', ') || 'los medios que actives abajo')}. El pago se avisa desde su enlace y aquí se confirma; al confirmarlo el producto queda vendido.</p>
+      </div>
+    </section>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Producto</th><th>Persona</th><th>Medio</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${filas.map((i) => {
+        const p = prod(i.product_id) || {};
+        const y = pago(i.id);
+        const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+        const st = y ? y.status : 'pendiente';
+        return `<tr>
+          <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}<strong>${esc(p.title || '')}</strong></div></td>
+          <td><div class="stack"><strong>${esc(i.buyer_name)}</strong><span class="sub">${esc(i.buyer_contact)}</span></div></td>
+          <td><div class="stack"><span>${y ? esc(METODOS[y.method] || y.method) : 'Sin definir'}</span>
+            <span class="sub">Ref. ${esc(y?.reference || '—')} · ${fecha(y?.confirmed_at || y?.declared_at || i.created_at)}</span></div></td>
+          <td class="num">${clp(y?.amount_clp ?? p.price_clp)}</td>
+          <td>${estadoHTML(ESTADO_PAGO, st)}</td>
+          <td class="right"><div style="display:inline-flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn btn-secondary" data-chat="${i.id}">Ver hilo</button>
+            ${st === 'porconfirmar' ? `<button class="btn btn-primary" data-conf="${i.id}">${ICON.check}Confirmar</button>` : ''}
+          </div></td>
+        </tr>`; }).join('')}</tbody>
+    </table>${filas.length ? '' : '<div class="empty" style="border:0">Todavía no hay reservas por cobrar.</div>'}</div>
+
+    <section style="padding:44px 0 0" class="stack">
+      <h3>Datos de cobro</h3>
+      <p class="lead" style="max-width:60ch;margin-bottom:8px">Estos datos son los que ve quien va a pagar. ${me.role === 'admin' ? 'Como administradora puedes editarlos aquí mismo.' : 'Solo una administradora puede editarlos.'}</p>
+    </section>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px">
+      ${['prex', 'mercadopago', 'transferencia'].map((k) => {
+        const c = cobroCfg.find((x) => x.method === k) || { method: k, enabled: false, details: {} };
+        const campos = Object.entries(c.details || {});
+        return `<div class="panel">
+          <div style="display:flex;gap:10px;align-items:start;flex-wrap:wrap">
+            <div class="stack" style="flex:1;min-width:140px"><strong style="font-size:15px">${esc(METODOS[k])}</strong></div>
+            <span class="state"><span class="dot" style="background:${c.enabled ? 'var(--verde)' : 'var(--gris)'}"></span>${c.enabled ? 'Activo' : 'Desactivado'}</span>
+          </div>
+          <form class="stack" data-cfg="${k}" style="gap:10px">
+            ${campos.map(([kk, vv]) => `<label class="field" style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)">${esc(kk)}
+              <input name="${esc(kk)}" value="${esc(vv)}" ${me.role === 'admin' ? '' : 'readonly'} style="min-height:38px;font-size:13.5px;text-transform:none;letter-spacing:0;background:${me.role === 'admin' ? 'var(--surface)' : '#F6F5F1'}"></label>`).join('')}
+            ${me.role === 'admin' ? `<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">
+              <button class="btn btn-primary" style="font-size:13px">Guardar</button>
+              <button type="button" class="btn btn-secondary" data-toggle="${k}" style="font-size:13px">${c.enabled ? 'Desactivar' : 'Activar'}</button></div>` : ''}
+          </form></div>`;
+      }).join('')}
+    </div>`;
+
+  view.querySelectorAll('[data-chat]').forEach((b) => b.onclick = () => ir('chat', { interestId: b.dataset.chat, back: 'cobros' }));
+  view.querySelectorAll('[data-conf]').forEach((b) => b.onclick = async () => {
+    const { error } = await sb.rpc('confirm_payment', { p_interest: b.dataset.conf });
+    if (error) return fail(error);
+    toast('Pago confirmado. Producto vendido.'); recargar();
+  });
+  view.querySelectorAll('[data-cfg]').forEach((f) => f.onsubmit = async (e) => {
+    e.preventDefault();
+    const details = Object.fromEntries(new FormData(f));
+    const { error } = await sb.from('payment_settings')
+      .update({ details, updated_by: me.id, updated_at: new Date().toISOString() })
+      .eq('method', f.dataset.cfg);
+    if (error) return fail(error);
+    toast('Datos de cobro guardados'); recargar();
+  });
+  view.querySelectorAll('[data-toggle]').forEach((b) => b.onclick = async () => {
+    const c = cobroCfg.find((x) => x.method === b.dataset.toggle);
+    const { error } = await sb.from('payment_settings')
+      .update({ enabled: !c?.enabled, updated_by: me.id, updated_at: new Date().toISOString() })
+      .eq('method', b.dataset.toggle);
+    if (error) return fail(error);
+    recargar();
+  });
+}
+
+/* ── equipo ─────────────────────────────────────────────────────── */
+function vEquipo() {
+  const admin = me.role === 'admin';
+  const activas = equipo.filter((u) => u.status === 'activo').length;
+  const invitadas = equipo.filter((u) => u.status === 'invitado').length;
+
+  view.innerHTML = `
+    <section class="section-head">
+      <div class="stack">
+        <span class="kicker">${activas} cuentas activas · ${invitadas} invitaciones pendientes</span>
+        <h2>Equipo</h2>
+        <p class="lead" style="max-width:62ch">Cada cuenta entra con su propio correo y enlace de acceso. <strong>Editor</strong> publica y edita cualquier producto, responde conversaciones y confirma pagos. <strong>Administradora</strong> hace lo mismo y además gestiona cuentas y datos de cobro.</p>
+      </div>
+      ${admin ? `<button class="btn btn-primary" id="invitar">${ICON.plus}Invitar persona</button>` : ''}
+    </section>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Persona</th><th>Rol</th><th>Estado</th><th>Publicados</th><th></th></tr></thead>
+      <tbody>${equipo.map((u) => {
+        const pubs = productos.filter((p) => p.created_by === u.id).length;
+        const gest = admin && u.id !== me.id;
+        return `<tr>
+          <td><div class="stack"><strong>${esc(u.name)}${u.id === me.id ? ' <span style="font-size:11px;color:var(--accent)">tú</span>' : ''}</strong>
+            <span class="sub">${esc(u.email)}</span></div></td>
+          <td>${gest ? `<select data-role="${u.id}">
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administradora</option>
+              <option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option></select>`
+            : `<span class="sub">${u.role === 'admin' ? 'Administradora' : 'Editor'}</span>`}</td>
+          <td><div class="stack">
+            <span class="state"><span class="dot" style="background:${u.status === 'activo' ? 'var(--verde)' : u.status === 'invitado' ? 'var(--ambar)' : 'var(--gris)'}"></span>${
+              { activo: 'Activo', invitado: 'Invitación enviada', suspendido: 'Suspendido' }[u.status] || esc(u.status)}</span>
+            <span class="sub" style="color:var(--faint)">${u.last_seen ? fecha(u.last_seen) : 'sin ingresar'}</span></div></td>
+          <td class="sub">${pubs} ${pubs === 1 ? 'producto' : 'productos'}</td>
+          <td class="right">${gest ? `<div style="display:inline-flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn btn-secondary" data-estado="${u.id}" data-to="${u.status === 'suspendido' ? 'activo' : 'suspendido'}">${u.status === 'suspendido' ? 'Reactivar' : 'Suspender'}</button>
+            ${pubs === 0 ? `<button class="btn btn-secondary btn-danger" data-quitar="${u.id}" aria-label="Quitar acceso" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button>` : ''}
+          </div>` : ''}</td>
+        </tr>`; }).join('')}</tbody>
+    </table></div>
+    ${admin ? '' : '<p class="lead" style="margin-top:16px">Tu cuenta es de editor: puedes ver el equipo, pero solo una administradora invita, cambia roles o suspende accesos.</p>'}`;
+
+  document.getElementById('invitar')?.addEventListener('click', () => document.getElementById('dlg-invitar').showModal());
+  view.querySelectorAll('[data-role]').forEach((s) => s.onchange = async () => {
+    const { error } = await sb.from('members').update({ role: s.value }).eq('id', s.dataset.role);
+    if (error) return fail(error);
+    toast('Rol actualizado'); recargar();
+  });
+  view.querySelectorAll('[data-estado]').forEach((b) => b.onclick = async () => {
+    const { error } = await sb.from('members').update({ status: b.dataset.to }).eq('id', b.dataset.estado);
+    if (error) return fail(error);
+    toast(b.dataset.to === 'activo' ? 'Cuenta reactivada' : 'Cuenta suspendida'); recargar();
+  });
+  view.querySelectorAll('[data-quitar]').forEach((b) => b.onclick = async () => {
+    const { error } = await sb.from('members').delete().eq('id', b.dataset.quitar);
+    if (error) return fail(error);
+    toast('Acceso eliminado'); recargar();
+  });
+}
+
+/* ── invitación ─────────────────────────────────────────────────── */
+const dlgInv = document.getElementById('dlg-invitar');
+dlgInv.querySelector('[data-close]').onclick = () => dlgInv.close();
+document.getElementById('form-invitar').onsubmit = async (e) => {
+  e.preventDefault();
+  const fd = Object.fromEntries(new FormData(e.target));
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch('/.netlify/functions/invitar-usuario', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify(fd),
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'No se pudo invitar');
+    toast('Invitación enviada a ' + fd.email);
+    dlgInv.close(); e.target.reset(); recargar();
+  } catch (err) { fail(err); }
+  btn.disabled = false;
+};
+
+sb.auth.onAuthStateChange((evt) => { if (evt === 'SIGNED_IN' && !me) init(); });
+init();
+</script>
+</body>
+</html>
