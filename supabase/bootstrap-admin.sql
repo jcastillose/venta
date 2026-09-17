@@ -15,7 +15,18 @@ begin
   select id into v_id from auth.users where lower(email) = lower(v_email);
 
   if v_id is null then
-    raise exception 'No existe el usuario % en auth.users. Entra una vez al sitio con ese correo (pestaña "Enlace por correo") y vuelve a correr este script.', v_email;
+    -- Crear el usuario directamente (no hay aún quien lo invite desde el panel).
+    v_id := gen_random_uuid();
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                            raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated', lower(v_email),
+            crypt(v_password, gen_salt('bf')), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb,
+            jsonb_build_object('name', v_nombre, 'equipo', true, 'role', 'admin', 'tiene_password', true),
+            now(), now());
+    insert into auth.identities (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+    values (gen_random_uuid(), v_id, lower(v_email), 'email',
+            jsonb_build_object('sub', v_id::text, 'email', lower(v_email), 'email_verified', true), now(), now(), now());
   end if;
 
   -- Cuenta del equipo con rol admin.
@@ -28,6 +39,7 @@ begin
   update auth.users
      set encrypted_password = crypt(v_password, gen_salt('bf')),
          email_confirmed_at = coalesce(email_confirmed_at, now()),
+         raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', v_nombre, 'equipo', true, 'tiene_password', true),
          updated_at = now()
    where id = v_id;
 

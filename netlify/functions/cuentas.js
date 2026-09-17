@@ -49,6 +49,7 @@ export default async (req) => {
     if (accion === 'crear') return await crear(admin, body);
     if (accion === 'editar') return await editar(admin, body, yo);
     if (accion === 'eliminar') return await eliminar(admin, body, yo);
+    if (accion === 'reenviar') return await reenviar(admin, body, req);
     return json({ error: 'Acción desconocida' }, 400);
   } catch (e) {
     console.error(e);
@@ -71,15 +72,17 @@ async function crear(admin, b) {
     const password = String(b.password || '');
     if (password.length < 8) throw new Error('La contraseña inicial debe tener al menos 8 caracteres');
     const { data, error } = await admin.auth.admin.createUser({
-      email, password, email_confirm: true, user_metadata: { name, role },
+      email, password, email_confirm: true, user_metadata: { name, role, equipo: true, status: 'activo' },
     });
-    if (error) throw error;
+    if (error) throw traducir(error);
     user = data.user;
   } else {
+    // Supabase crea el usuario y envía UN correo (plantilla "Invite user") con el
+    // enlace; vuelve a /admin.html, que activa la cuenta al detectar la sesión.
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { name, role }, redirectTo: SITE + '/admin.html',
+      data: { name, role, equipo: true, status: 'invitado' }, redirectTo: SITE + '/admin.html',
     });
-    if (error) throw error;
+    if (error) throw traducir(error);
     user = data.user;
   }
 
@@ -89,6 +92,28 @@ async function crear(admin, b) {
   );
   if (mErr) throw mErr;
   return json({ ok: true, id: user.id, modo });
+}
+
+/* ── reenviar: nuevo enlace de acceso a una cuenta existente (invitación caducada) ── */
+async function reenviar(admin, b) {
+  const id = String(b.id || '');
+  const { data: m } = await admin.from('members').select('email').eq('id', id).single();
+  if (!m) throw new Error('La cuenta no existe');
+  // El correo se confirma para que el enlace sea "Magic Link" y no una segunda invitación.
+  await admin.auth.admin.updateUserById(id, { email_confirm: true });
+  const { error } = await admin.auth.signInWithOtp({
+    email: m.email, options: { emailRedirectTo: SITE + '/admin.html', shouldCreateUser: false },
+  });
+  if (error) throw traducir(error);
+  return json({ ok: true });
+}
+
+function traducir(error) {
+  const m = error.message || '';
+  if (/already|registered|exists/i.test(m)) return new Error('Ese correo ya tiene una cuenta');
+  if (/rate|limit/i.test(m)) return new Error('Supabase limitó el envío de correos (plan gratuito: pocos por hora). Crea la cuenta con contraseña inicial o configura SMTP propio.');
+  if (/redirect/i.test(m)) return new Error('La URL ' + SITE + '/admin.html no está en Supabase → Authentication → URL Configuration → Redirect URLs.');
+  return error;
 }
 
 /* ── editar: nombre, correo, rol, estado ──────────────────────────────────── */

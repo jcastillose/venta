@@ -12,7 +12,9 @@ Crea tablas, vistas, políticas RLS, funciones RPC, el bucket `fotos` y los perm
 
 ### Migración 002 — ofertas
 
-Después de `schema.sql`, correr también `docs/supabase/002-ofertas.sql`: crea la tabla `offers`, la vista pública `offer_summary` (solo monto máximo y cantidad, sin nombres) y actualiza `catalog`, `create_interest` y `thread_by_token`.
+**Camino corto (recomendado):** correr `supabase/000-base-completa.sql` una sola vez. Crea o repara todo (tablas, RLS, RPC, vistas, bucket, semillas, realtime) e imprime un informe ok / FALTA. Equivale a `schema.sql` + 002…007 y es re-ejecutable sobre una base con datos. Luego `bootstrap-admin.sql`.
+
+**Camino por pasos** (histórico): después de `schema.sql`, correr también `docs/supabase/002-ofertas.sql`: crea la tabla `offers`, la vista pública `offer_summary` (solo monto máximo y cantidad, sin nombres) y actualiza `catalog`, `create_interest` y `thread_by_token`.
 
 ### Migración 003 — ajustes
 
@@ -29,6 +31,12 @@ Correr `supabase/005-titulo.sql`: agrega la clave `titulo_sitio` en `site_settin
 ### Migración 006 — ofertas por producto
 
 Correr `supabase/006-ofertas-por-producto.sql`: agrega `products.accepts_offers` (por defecto activo). Lo que rige en cada producto es este campo: se cambia desde **Productos** (columna Ofertas) o en el editor. El interruptor **Ajustes → Permitir ofertas en todos los productos** pasa a ser masivo: la RPC `set_offers_for_all` actualiza el ajuste y el estado de todos los productos a la vez (el panel pide confirmación y advierte cuántos cambian) y queda como valor por defecto para los productos nuevos. `create_interest`, `place_offer_by_token` y `thread_by_token` respetan el campo del producto.
+
+### Migración 007 — verificación y saneamiento
+
+Correr `supabase/007-verificacion.sql` al final (y cada vez que se dude del estado de la base). Corrige: sobrecarga duplicada de `create_interest`, lectura pública de `members` (exponía correos), inserción directa en `interests`, claves de auditoría sin `on delete set null` (impedían eliminar cuentas), ajustes y categorías base faltantes, realtime. Al terminar imprime una tabla con cada objeto que usa el sitio y `ok` / `FALTA`. Cualquier `FALTA` indica qué migración volver a correr.
+
+**No volver a correr `schema.sql` después de 004**: su vista `catalog` tiene menos columnas y falla; los cambios posteriores viven en las migraciones.
 
 ## 2. Auth
 
@@ -54,6 +62,11 @@ No existe un interruptor llamado "Magic Link": viene incluido en el proveedor Em
 
 ## 3. Primera cuenta de administrador
 
+Correr `supabase/bootstrap-admin.sql` con tu correo, nombre y una contraseña temporal: crea la cuenta en Auth si no existe, la marca como administrador activo y fija la contraseña. Entrar con **Contraseña** y cambiarla en **Mi cuenta**. No hace falta pasar por el correo.
+
+Nota: "Enlace por correo" solo funciona para correos que ya tienen cuenta en el equipo (`shouldCreateUser: false`); un correo desconocido recibe el aviso de pedir la cuenta a un administrador. Las cuentas invitadas nacen en estado *invitado* y pasan a *activo* solas al abrir el enlace por primera vez.
+
+Camino alternativo (histórico):
 1. Entrar a `https://mobventa.netlify.app/admin.html` → pestaña *Enlace por correo* → abrir el enlace del mail.
 2. En SQL Editor, subir esa cuenta a admin:
 
@@ -80,6 +93,43 @@ Desde ahí las demás cuentas se crean en la pantalla **Equipo** → *Nueva cuen
 - **Invitación por correo**: recibe un enlace; consume el límite de correos de Supabase.
 
 El administrador también puede **editar** (nombre, correo, rol, contraseña), **suspender/reactivar** y **eliminar** cualquier cuenta. Al eliminar, los productos que publicó esa persona pasan al administrador que la elimina. No se puede eliminar al único administrador activo ni la propia cuenta.
+
+### Lista de coherencia entre plataformas (cuando el primer ingreso falla)
+
+**Supabase → Authentication → URL Configuration**
+- Site URL: `https://mobventa.netlify.app` (sin barra final).
+- Redirect URLs: `https://mobventa.netlify.app/admin.html` y `https://mobventa.netlify.app/**`. Si faltan, el correo vuelve a la Site URL sin sesión o falla con "redirect_to is not allowed".
+
+**Supabase → Authentication → Email Templates**
+- *Invite user*, *Magic Link* y *Reset Password* deben contener `{{ .ConfirmationURL }}`. Si se editaron y perdieron la variable, el correo llega sin enlace.
+- Conviene que el asunto diga el nombre del sitio para que no caiga en spam.
+
+**Supabase → Authentication → Providers → Email**
+- Email habilitado; *Confirm email* encendido; *Secure email change* por defecto. Minimum password length 8.
+
+**Supabase → Project Settings → Auth → SMTP**
+- Sin SMTP propio el remitente es `noreply@mail.app.supabase.io`, con límite de ~3–4 correos por hora y frecuente caída en spam. Para uso real configurar Resend/Brevo/Gmail y verificar el dominio remitente. Mientras no exista, crear cuentas **con contraseña inicial**.
+
+**Supabase → Project Settings → API**
+- URL del proyecto y `anon public` = `SUPABASE_URL`/`SUPABASE_ANON_KEY` en `site/src/supabase.js`.
+- `service_role` = `SUPABASE_SERVICE_ROLE_KEY` en Netlify. Los tres deben ser del **mismo** proyecto.
+
+**Supabase → SQL Editor**
+- `000-base-completa.sql` ejecutado; el informe final con `ok` en `handle_new_user`, `on_auth_user_created`, `activar_invitacion` y "al menos un administrador activo".
+- Authentication → Users: el correo debe aparecer y, si va a usar contraseña, con *Email confirmed*.
+
+**Netlify → Site configuration**
+- Environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` sin espacios ni comillas. Tras cambiarlas: Deploys → *Clear cache and deploy site*.
+- Functions: `cuentas` y `avisos` listadas. Si no aparecen, revisar `netlify.toml` y `netlify/functions/package.json`.
+- Domain: si algún día se usa dominio propio, agregarlo también en Redirect URLs de Supabase y en `SITE_URL` de `supabase.js`.
+
+**GitHub**
+- `main` debe contener la misma versión de `admin.html`, `src/supabase.js`, `netlify/functions/cuentas.js` y `supabase/000-base-completa.sql` que este zip.
+
+**Navegador y correo**
+- El enlace sirve una vez y caduca en una hora. Algunos clientes de correo o antivirus lo "visitan" antes y lo consumen: usar *Reenviar enlace* en Equipo o entrar con contraseña.
+- Abrir el enlace en el navegador donde se va a trabajar (no en la vista previa del cliente de correo).
+- Si aparece "Cuenta invitado", el panel publicado está desactualizado: subir la versión nueva de `admin.html`.
 
 ## 4. Datos de cobro
 

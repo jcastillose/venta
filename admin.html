@@ -35,7 +35,7 @@
       <label class="choice"><span class="head"><input type="radio" name="modo" value="password" checked><span class="mark"></span>
         <span class="stack"><b>Con contraseña inicial</b><span class="desc">Queda lista para entrar hoy. Tú le comunicas la contraseña y la cambia en Mi cuenta.</span></span></span></label>
       <label class="choice"><span class="head"><input type="radio" name="modo" value="invitar"><span class="mark"></span>
-        <span class="stack"><b>Invitación por correo</b><span class="desc">Recibe un enlace para entrar. Usa el límite de correos de Supabase.</span></span></span></label>
+        <span class="stack"><b>Invitación por correo</b><span class="desc">Recibe un enlace que abre el panel y activa la cuenta. Sirve una vez, caduca en una hora y debe abrirse en el navegador donde va a trabajar.</span></span></span></label>
     </div>
     <label class="field" id="cuenta-pass-wrap">Contraseña inicial<input name="password" type="text" minlength="8" autocomplete="off" placeholder="Mínimo 8 caracteres"><span class="hint" id="cuenta-pass-hint">Puedes dejarla vacía para no cambiarla.</span></label>
     <div class="actions">
@@ -81,13 +81,40 @@ let me = null, vista = 'productos', ctx = {};
 let productos = [], fotosPorProducto = {}, intereses = [], pagos = [], cobroCfg = [], equipo = [], ofertas = [], ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
 
 /* ── sesión ─────────────────────────────────────────────────────── */
+/* Supabase devuelve los errores del enlace en la URL: #error=access_denied&error_code=otp_expired… */
+function errorDeEnlace() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const q = new URLSearchParams(location.search);
+  const code = h.get('error_code') || q.get('error_code') || '';
+  const desc = h.get('error_description') || q.get('error_description') || '';
+  if (!code && !desc) return null;
+  history.replaceState(null, '', '/admin.html');
+  if (/expired/i.test(code + desc)) return 'El enlace caducó o ya fue usado: dura una hora y sirve una sola vez. Pide uno nuevo con “Enlace por correo”.';
+  return 'El enlace no es válido. Pide uno nuevo con “Enlace por correo” desde este mismo navegador. (' + esc(decodeURIComponent((desc || code).replace(/\+/g, ' '))) + ')';
+}
+const traeToken = () => /access_token=|code=|type=/.test(location.hash + location.search);
+
 async function init() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) return login();
+  const aviso = errorDeEnlace();
+  let { data: { session } } = await sb.auth.getSession();
+  if (!session && traeToken()) {
+    // La librería está canjeando el enlace; onAuthStateChange(SIGNED_IN) volverá a llamar a init().
+    view.innerHTML = '<p class="spinner">Validando el enlace…</p>';
+    return;
+  }
+  if (!session) return login(aviso);
+  if (traeToken()) history.replaceState(null, '', '/admin.html');
   view.innerHTML = '<p class="spinner">Entrando…</p>';
-  const { data, error } = await sb.from('members').select('*').eq('id', session.user.id).single();
+  let { data, error } = await sb.from('members').select('*').eq('id', session.user.id).single();
   if (error && error.code !== 'PGRST116') return errorAcceso(session.user.email, error);
   if (!data) return sinCuenta(session.user.email);
+  if (data.status === 'invitado') {
+    // Primer ingreso con el enlace de invitación: la cuenta se activa sola.
+    const { data: st, error: e2 } = await sb.rpc('activar_invitacion');
+    if (e2) return errorAcceso(session.user.email, e2);
+    data.status = st || 'activo';
+    toast('Bienvenido/a. Crea tu contraseña en Mi cuenta para no depender del correo.');
+  }
   if (data.status !== 'activo') return suspendida(data);
   me = data;
   sb.from('members').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {});
@@ -103,12 +130,13 @@ async function init() {
 
 let modoLogin = localStorage.getItem('vh.modoLogin') || 'password';
 
-function login() {
+function login(aviso) {
   document.getElementById('nav-tabs').classList.add('hide');
   document.getElementById('nav-me').classList.add('hide');
   const pass = modoLogin === 'password';
   view.innerHTML = `<section class="center">
     <div class="panel" style="width:min(420px,100%);padding:32px;gap:16px">
+      ${aviso ? `<div class="note note-warn">${aviso}</div>` : ''}
       <div class="icon-box" style="width:40px;height:40px;border-radius:8px;background:var(--accent-wash);display:grid;place-items:center;color:var(--accent)">${ICON.login}</div>
       <h2 style="font-size:26px">Acceso equipo</h2>
       <div class="tabs" style="gap:18px">
@@ -122,7 +150,7 @@ function login() {
       </form>
       <p class="lead" style="font-size:12.5px">${pass
         ? 'La contraseña la creas tú desde <strong>Mi cuenta</strong> la primera vez que entras. Si aún no tienes una, usa el enlace por correo.'
-        : 'Te enviamos un enlace de acceso al correo de tu cuenta. El servicio de correo de Supabase permite pocos envíos por hora.'}</p>
+        : 'Te enviamos un enlace de acceso al correo de tu cuenta. Ábrelo en <strong>este mismo navegador</strong>; sirve una vez y caduca en una hora.'}</p>
       ${pass ? `<button type="button" class="btn btn-ghost" id="olvide" style="font-size:12.5px;justify-self:start">Olvidé mi contraseña</button>` : ''}
       <div id="login-msg"></div>
     </div>
@@ -156,10 +184,13 @@ function login() {
       return init();
     }
 
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: SITE_URL + '/admin.html' } });
+    // shouldCreateUser:false → solo correos que ya tienen cuenta (creada desde Equipo).
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: SITE_URL + '/admin.html', shouldCreateUser: false } });
     btn.disabled = false;
     if (error) {
-      msg.innerHTML = `<div class="note note-warn">${esc(error.message)}${/rate/i.test(error.message) ? ' — espera una hora o entra con contraseña.' : ''}</div>`;
+      msg.innerHTML = `<div class="note note-warn">${/not allowed|signups|not found/i.test(error.message)
+        ? 'Ese correo no tiene cuenta en el equipo. Pídele a un administrador que la cree en <strong>Equipo → Nueva cuenta</strong>.'
+        : esc(error.message) + (/rate/i.test(error.message) ? ' — espera una hora o entra con contraseña.' : '')}</div>`;
       return;
     }
     msg.innerHTML = `<div class="note note-ok">Listo. Revisa <strong>${esc(email)}</strong> y abre el enlace para entrar.</div>`;
@@ -222,7 +253,7 @@ function errorAcceso(email, error) {
 function sinCuenta(email) {
   view.innerHTML = `<section class="center"><div class="panel" style="max-width:460px;padding:28px">
     <h3>Tu correo no tiene cuenta en el equipo</h3>
-    <p class="lead">${esc(email)} entró correctamente, pero no hay una cuenta asociada. Pídele a un administrador que te invite.</p>
+    <p class="lead">${esc(email)} entró correctamente, pero no hay una cuenta asociada. Pídele a un administrador que la cree en <strong>Equipo → Nueva cuenta</strong> con este mismo correo; si es la primera cuenta del sitio, corre <code>bootstrap-admin.sql</code>.</p>
     <div><button class="btn btn-secondary" id="salir">Salir</button></div></div></section>`;
   document.getElementById('salir').onclick = salir;
 }
@@ -883,6 +914,7 @@ function vEquipo() {
           <td class="sub">${pubs} ${pubs === 1 ? 'producto' : 'productos'}</td>
           <td class="right">${gest ? `<div style="display:inline-flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn btn-secondary" data-editar="${u.id}">${ICON.edit}Editar</button>
+            ${u.status === 'invitado' ? `<button class="btn btn-secondary" data-reenviar="${u.id}" title="Vuelve a enviar el enlace de acceso">Reenviar enlace</button>` : ''}
             <button class="btn btn-secondary" data-estado="${u.id}" data-to="${u.status === 'suspendido' ? 'activo' : 'suspendido'}">${u.status === 'suspendido' ? 'Reactivar' : 'Suspender'}</button>
             <button class="btn btn-secondary btn-danger" data-eliminar="${u.id}" aria-label="Eliminar cuenta" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button>
           </div>` : ''}</td>
@@ -892,6 +924,12 @@ function vEquipo() {
 
   document.getElementById('nueva-cuenta')?.addEventListener('click', () => abrirCuenta(null));
   view.querySelectorAll('[data-editar]').forEach((b) => b.onclick = () => abrirCuenta(equipo.find((u) => u.id === b.dataset.editar)));
+  view.querySelectorAll('[data-reenviar]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    const r = await llamarCuentas({ accion: 'reenviar', id: b.dataset.reenviar });
+    b.disabled = false;
+    if (r) toast('Enlace de acceso enviado');
+  });
   view.querySelectorAll('[data-estado]').forEach((b) => b.onclick = async () => {
     const r = await llamarCuentas({ accion: 'editar', id: b.dataset.estado, status: b.dataset.to });
     if (!r) return;
@@ -1059,7 +1097,7 @@ document.getElementById('form-cuenta').onsubmit = async (e) => {
 let recuperando = false;
 sb.auth.onAuthStateChange((evt) => {
   if (evt === 'PASSWORD_RECOVERY') { recuperando = true; return recuperar(); }
-  if (evt === 'SIGNED_IN' && !me && !recuperando) init();
+  if ((evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION') && !me && !recuperando) init();
 });
 
 if (/type=recovery/.test(location.hash)) recuperando = true;
