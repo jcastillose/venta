@@ -1,6 +1,7 @@
 // Avisos por correo con Resend.
-// Lo llama un Database Webhook de Supabase cuando entra un interés, un pago
-// o cuando una cuenta invitada del equipo se activa (UPDATE en members).
+// Lo llama un Database Webhook de Supabase cuando entra un interés, un pago,
+// cuando una cuenta invitada del equipo se activa (UPDATE en members) o cuando
+// el equipo responde en un hilo (INSERT en messages con sender = 'vendedor').
 //
 // Variables de entorno en Netlify:
 //   RESEND_API_KEY            re_...
@@ -29,8 +30,42 @@ export default async (req) => {
   if (type !== 'INSERT') return ok();
   if (table === 'interests') return await avisoInteres(sb, record);
   if (table === 'payments') return await avisoPago(sb, record);
+  if (table === 'messages') return await avisoRespuesta(sb, record);
   return ok();
 };
+
+/* ── Respuesta del equipo: aviso al interesado con enlace a su hilo ────────── */
+async function avisoRespuesta(sb, m) {
+  if (!m || m.sender !== 'vendedor') return ok();
+  const { data: i } = await sb.from('interests')
+    .select('id, token, buyer_name, buyer_contact, status, products(title)')
+    .eq('id', m.interest_id).maybeSingle();
+  if (!i || !esCorreo(i.buyer_contact)) return ok();
+
+  // Un solo correo por ráfaga: si el equipo escribió otro mensaje en los 10 minutos
+  // anteriores, ya se avisó. Así varias líneas seguidas no generan varios correos.
+  const desde = new Date(new Date(m.created_at).getTime() - 10 * 60 * 1000).toISOString();
+  const { count } = await sb.from('messages').select('id', { count: 'exact', head: true })
+    .eq('interest_id', i.id).eq('sender', 'vendedor').neq('id', m.id)
+    .gte('created_at', desde).lt('created_at', m.created_at);
+  if (count > 0) return ok();
+
+  const titulo = i.products?.title || 'tu producto';
+  const extracto = m.body.length > 280 ? m.body.slice(0, 277).trimEnd() + '…' : m.body;
+  await enviar({
+    to: i.buyer_contact,
+    subject: `Respuesta sobre ${titulo}`,
+    html: plantilla({
+      titulo: 'El equipo de venta te respondió',
+      cuerpo: `<p>Hola ${esc(i.buyer_name.split(' ')[0])}, hay un mensaje nuevo en tu conversación sobre <strong>${esc(titulo)}</strong>:</p>
+        <blockquote style="margin:14px 0;padding:12px 16px;border-left:3px solid #C67139;background:#F7F2E9;border-radius:0 8px 8px 0;color:#2B2A27;white-space:pre-wrap">${esc(extracto)}</blockquote>
+        <p>Puedes leerlo completo y seguir la conversación desde tu enlace privado.</p>`,
+      cta: { url: `${SITE}/c/${i.token}`, label: 'Abrir la conversación' },
+      pie: 'Este enlace es personal: no lo compartas. Si ya no te interesa, puedes borrar la conversación desde el mismo enlace.',
+    }),
+  });
+  return ok();
+}
 
 /* ── Cuenta activada: la persona invitada abrió su enlace por primera vez ──── */
 async function avisoActivacion(sb, m, antes) {

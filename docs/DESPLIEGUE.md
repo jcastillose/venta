@@ -176,7 +176,7 @@ Para que la función `cuentas` instale su dependencia, Netlify usa `site/package
 
 ## 7. Avisos por correo (opcional)
 
-Enlace privado al interesado, avisos al equipo cuando entra un interés o un pago, y aviso a los administradores cuando una persona invitada activa su cuenta: ver `docs/AVISOS-EMAIL.md` (Netlify Function + Resend + tres webhooks de Supabase).
+Enlace privado al interesado, avisos al equipo cuando entra un interés o un pago, aviso a los administradores cuando una persona invitada activa su cuenta, y aviso al interesado cuando el equipo le responde (con botón para abrir y continuar su conversación): ver `docs/AVISOS-EMAIL.md` (Netlify Function + Resend + triggers creados con `supabase/014-aviso-respuesta.sql`, donde hay que poner el secreto).
 
 ## 8. Fotos
 
