@@ -8,12 +8,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=7">
+<link rel="stylesheet" href="/src/app.css?v=8">
 </head>
 <body>
 <nav class="nav">
   <a class="brand" href="/">Oferta de Muebles y Electrodomésticos</a>
   <a href="/">Catálogo</a>
+  <a href="/mis-conversaciones">Mis conversaciones</a>
 </nav>
 
 <main>
@@ -149,19 +150,21 @@ function pintar() {
             <span class="when">${m.sender === 'interesado' ? esc(hilo.buyer_name.split(' ')[0]) : 'Equipo de venta'} · ${hora(m.created_at)}</span>
           </div>`).join('')}
       </div>
-      <form id="form-msg">
+      ${hilo.interest_status === 'descartado'
+        ? `<p class="sys" style="padding:12px;border-top:1px solid var(--line);margin:0">El equipo de venta cerró esta conversación. Puedes seguir viendo el catálogo.</p>`
+        : `<form id="form-msg">
         <input name="body" placeholder="Escribe un mensaje…" aria-label="Mensaje" autocomplete="off" required>
         <button type="submit" aria-label="Enviar">${ICON.send}</button>
-      </form>
+      </form>`}
     </section>
-    ${franjaOferta()}${franjaPago()}`;
+    ${hilo.interest_status === 'descartado' ? '' : franjaOferta() + franjaPago()}`;
 
   const log = document.getElementById('log');
   log.scrollTop = log.scrollHeight;
   document.getElementById('btn-pagar')?.addEventListener('click', abrirPago);
   document.getElementById('btn-ofertar')?.addEventListener('click', abrirOferta);
 
-  document.getElementById('form-msg').onsubmit = async (e) => {
+  document.getElementById('form-msg')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = e.target.body;
     const body = input.value.trim();
@@ -170,7 +173,7 @@ function pintar() {
     const { error } = await sb.rpc('send_message_by_token', { p_token: token, p_body: body });
     if (error) return fail(error);
     cargar();
-  };
+  });
 }
 
 const dlgOferta = document.getElementById('dlg-oferta');

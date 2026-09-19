@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=7">
+<link rel="stylesheet" href="/src/app.css?v=8">
 </head>
 <body>
 <nav class="nav">
@@ -706,10 +706,10 @@ async function optimizarFoto(file) {
 /* ── interesados ────────────────────────────────────────────────── */
 function vInteresados() {
   const filtro = ctx.filtro || 'Todos';
-  const mapa = { 'Nuevos': 'nuevo', 'En conversación': 'conversando', 'Reservados': 'reservado' };
+  const mapa = { 'Nuevos': 'nuevo', 'En conversación': 'conversando', 'Reservados': 'reservado', 'Descartados': 'descartado' };
   const lista = intereses
     .filter((i) => !ctx.productId || i.product_id === ctx.productId)
-    .filter((i) => filtro === 'Todos' || i.status === mapa[filtro])
+    .filter((i) => filtro === 'Todos' ? i.status !== 'descartado' : i.status === mapa[filtro])
     .sort((a, b) => (oferta(b.id)?.amount_clp || 0) - (oferta(a.id)?.amount_clp || 0) || new Date(b.created_at) - new Date(a.created_at));
   const nuevos = intereses.filter((i) => i.status === 'nuevo').length;
 
@@ -722,7 +722,7 @@ function vInteresados() {
       </div>
     </section>
     <div class="tabs" style="padding-bottom:8px">
-      ${['Todos', 'Nuevos', 'En conversación', 'Reservados'].map((f) =>
+      ${['Todos', 'Nuevos', 'En conversación', 'Reservados', 'Descartados'].map((f) =>
         `<button type="button" role="tab" aria-selected="${f === filtro}" data-f="${esc(f)}">${f}</button>`).join('')}
       ${ctx.productId ? `<button class="btn btn-secondary" id="quitar-filtro" style="margin-bottom:6px;padding:5px 10px;font-size:12.5px">${esc(prod(ctx.productId)?.title || '')} ✕</button>` : ''}
     </div>
@@ -746,12 +746,12 @@ function vInteresados() {
           <div class="sub" style="color:${esTop ? 'var(--accent)' : 'var(--ink-2)'};font-weight:600">${of ? `Ofrece ${clp(of.amount_clp)}${esTop ? ' · oferta más alta' : ''}` : `Pide al precio publicado ${clp(p.price_clp)}`}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${i.status !== 'reservado' && i.status !== 'vendido' && p.status !== 'vendido'
+          ${i.status !== 'reservado' && i.status !== 'vendido' && i.status !== 'descartado' && p.status !== 'vendido'
             ? `<button class="btn btn-secondary" data-res="${i.id}">Reservar</button>` : ''}
           <button class="btn btn-primary" data-chat="${i.id}">${ICON.chat}Conversar</button>
         </div>
       </article>`; }).join('')}
-      ${lista.length ? '' : '<div class="empty" style="margin-top:16px">Nadie por aquí todavía. Cuando alguien marque interés aparecerá en esta bandeja.</div>'}
+      ${lista.length ? '' : `<div class="empty" style="margin-top:16px">${filtro === 'Descartados' ? 'No hay conversaciones descartadas.' : 'Nadie por aquí todavía. Cuando alguien marque interés aparecerá en esta bandeja.'}</div>`}
     </div>`;
 
   view.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => ir('interesados', { ...ctx, filtro: b.dataset.f }));
@@ -788,12 +788,19 @@ async function vChat() {
       `${esc(i.buyer_name.split(' ')[0])} ya puede pagar desde su enlace privado. Los datos de cobro se muestran ahí.`);
   }
 
-  const acciones = (i.status !== 'vendido' && p.status !== 'vendido')
+  const acciones = i.status === 'descartado'
+    ? `<div style="max-width:780px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:18px 2px">
+        <span class="lead" style="margin-right:auto">Conversación descartada: ${esc(i.buyer_name)} ya no puede escribir, ofertar ni pagar.</span>
+        <button class="btn btn-secondary" id="btn-reabrir">Reabrir</button>
+      </div>`
+    : (i.status !== 'vendido' && p.status !== 'vendido')
     ? `<div style="max-width:780px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:18px 2px">
         <span class="lead" style="margin-right:auto">Cerrar el trato con ${esc(i.buyer_name)}:</span>
+        <button class="btn btn-ghost" id="btn-descartar" style="color:var(--rojo,#b3261e)">Descartar</button>
         ${i.status !== 'reservado' ? `<button class="btn btn-secondary" id="btn-reservar">Reservar</button>` : ''}
         <button class="btn btn-primary" id="btn-vender">${ICON.check}Marcar vendido</button>
       </div>` : '';
+  const cerrado = i.status === 'descartado' || i.status === 'vendido';
 
   view.innerHTML = `
     <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}${ctx.back === 'cobros' ? 'Cobros' : 'Interesados'}</button></div>
@@ -808,13 +815,15 @@ async function vChat() {
       </header>
       <div class="log" id="log">
         <p class="sys">Conversación privada con ${esc(i.buyer_name)} sobre este producto.</p>
-        ${(ms || []).map((m) => `<div class="msg ${m.sender === 'vendedor' ? 'mine' : ''}">
+        ${(ms || []).map((m) => `<div class="msg ${m.sender === 'vendedor' ? 'mine' : ''}" data-msg="${m.id}">
           <div class="bubble">${esc(m.body)}</div>
-          <span class="when">${m.sender === 'vendedor' ? esc(nombreDe(p.created_by).split(' ')[0]) : esc(i.buyer_name.split(' ')[0])} · ${hora(m.created_at)}</span>
+          <span class="when">${m.sender === 'vendedor' ? esc(nombreDe(p.created_by).split(' ')[0]) : esc(i.buyer_name.split(' ')[0])} · ${hora(m.created_at)}
+            <button type="button" class="msg-del" data-del="${m.id}" title="Borrar mensaje" aria-label="Borrar mensaje">${ICON.trash}</button></span>
         </div>`).join('')}
       </div>
-      <form id="form-msg"><input name="body" placeholder="Escribe un mensaje…" aria-label="Mensaje" autocomplete="off" required>
-        <button type="submit" aria-label="Enviar">${ICON.send}</button></form>
+      ${cerrado ? `<p class="sys" style="padding:12px;border-top:1px solid var(--line);margin:0">Conversación cerrada.</p>`
+      : `<form id="form-msg"><input name="body" placeholder="Escribe un mensaje…" aria-label="Mensaje" autocomplete="off" required>
+        <button type="submit" aria-label="Enviar">${ICON.send}</button></form>`}
     </section>
     ${franja}${acciones}
     <p class="lead" style="max-width:780px;margin-top:14px;font-size:12.5px">Enlace privado de esta persona: <code>${esc(location.origin)}/c/${esc(i.token)}</code></p>`;
@@ -822,7 +831,7 @@ async function vChat() {
   document.getElementById('volver').onclick = () => ir(ctx.back || 'interesados');
   const log = document.getElementById('log'); log.scrollTop = log.scrollHeight;
 
-  document.getElementById('form-msg').onsubmit = async (e) => {
+  document.getElementById('form-msg')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = e.target.body, body = input.value.trim();
     if (!body) return;
@@ -831,7 +840,27 @@ async function vChat() {
     if (error) return fail(error);
     if (i.status === 'nuevo') await sb.from('interests').update({ status: 'conversando' }).eq('id', i.id);
     await cargar(); render();
-  };
+  });
+  // Borrar un mensaje del hilo (propio o de la persona). Desaparece también en su enlace.
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    if (!confirm('¿Borrar este mensaje? También desaparece de la conversación de la persona.')) return;
+    const { error } = await sb.from('messages').delete().eq('id', b.dataset.del);
+    if (error) return fail(error);
+    view.querySelector(`[data-msg="${b.dataset.del}"]`)?.remove();
+    toast('Mensaje borrado');
+  });
+  document.getElementById('btn-descartar')?.addEventListener('click', async () => {
+    const motivo = prompt(`Descartar a ${i.buyer_name}: cierra su conversación, retira su oferta${i.status === 'reservado' ? ' y libera el producto' : ''}.\n\nMensaje de cierre que verá (opcional):`, 'Gracias por tu interés. Esta conversación quedó cerrada.');
+    if (motivo === null) return;
+    const { error } = await sb.rpc('discard_interest', { p_interest: i.id, p_reason: motivo });
+    if (error) return fail(error);
+    toast('Interesado descartado'); await cargar(); render();
+  });
+  document.getElementById('btn-reabrir')?.addEventListener('click', async () => {
+    const { error } = await sb.rpc('reopen_interest', { p_interest: i.id });
+    if (error) return fail(error);
+    toast('Conversación reabierta'); await cargar(); render();
+  });
   document.getElementById('btn-reservar')?.addEventListener('click', async () => {
     const { error } = await sb.rpc('close_deal', { p_interest: i.id, p_status: 'reservado' });
     if (error) return fail(error);

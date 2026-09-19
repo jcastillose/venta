@@ -293,6 +293,8 @@ begin
   from public.interests i join public.products p on p.id = i.product_id
   where i.token = p_token;
   if v_interest is null then raise exception 'token inválido'; end if;
+  if exists (select 1 from public.interests where id = v_interest and status = 'descartado') then
+    raise exception 'Esta conversación fue cerrada por el equipo de venta'; end if;
   if not exists (select 1 from public.payment_settings where method = p_method and enabled) then
     raise exception 'medio de pago no disponible';
   end if;
@@ -518,6 +520,8 @@ begin
   if v_interest is null then raise exception 'token inválido'; end if;
   if not v_on then raise exception 'Las ofertas están desactivadas para este producto'; end if;
   if v_status = 'vendido' then raise exception 'El producto ya fue vendido'; end if;
+  if exists (select 1 from public.interests where id = v_interest and status = 'descartado') then
+    raise exception 'Esta conversación fue cerrada por el equipo de venta'; end if;
 
   insert into public.offers (interest_id, product_id, amount_clp)
   values (v_interest, v_product, p_amount)
@@ -617,6 +621,81 @@ grant execute on function
   public.is_member(), public.is_admin()
   to authenticated;
 
+-- ── 6b. Moderación (008): borrar mensajes y descartar interesados ────────────
+-- Cualquier cuenta activa (admin o editor) borra mensajes de un hilo.
+drop policy if exists "mensajes: equipo borra" on public.messages;
+create policy "mensajes: equipo borra" on public.messages for delete using (public.is_member());
+
+-- Descartar: el hilo queda cerrado para la persona (no puede escribir ni ofertar ni pagar),
+-- su oferta se retira del ranking público y, si estaba reservado, el producto vuelve a disponible.
+create or replace function public.discard_interest(p_interest uuid, p_reason text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_product uuid; v_status public.interest_status;
+begin
+  if not public.is_member() then raise exception 'sin permiso'; end if;
+  select product_id, status into v_product, v_status from public.interests where id = p_interest;
+  if v_product is null then raise exception 'interés inexistente'; end if;
+  if v_status = 'vendido' then raise exception 'Este trato ya se cerró como vendido'; end if;
+
+  update public.interests set status = 'descartado' where id = p_interest;
+  delete from public.offers where interest_id = p_interest;
+  update public.payments set status = 'anulado' where interest_id = p_interest and status <> 'pagado';
+  if v_status = 'reservado' then
+    update public.products set status = 'disponible' where id = v_product and status = 'reservado';
+  end if;
+  insert into public.messages (interest_id, sender, body)
+  values (p_interest, 'vendedor', coalesce(nullif(trim(p_reason), ''), 'Esta conversación fue cerrada por el equipo de venta.'));
+end $$;
+
+-- Reabrir por si se descartó por error.
+create or replace function public.reopen_interest(p_interest uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_member() then raise exception 'sin permiso'; end if;
+  update public.interests set status = 'conversando' where id = p_interest and status = 'descartado';
+end $$;
+
+grant execute on function public.discard_interest(uuid, text), public.reopen_interest(uuid) to authenticated;
+
+-- El interesado descartado no puede escribir ni ofertar.
+create or replace function public.send_message_by_token(p_token text, p_body text)
+returns public.messages
+language plpgsql security definer set search_path = public as $$
+declare v_interest uuid; v_status public.interest_status; v_msg public.messages;
+begin
+  select id, status into v_interest, v_status from public.interests where token = p_token;
+  if v_interest is null then raise exception 'token inválido'; end if;
+  if v_status = 'descartado' then raise exception 'Esta conversación fue cerrada por el equipo de venta'; end if;
+  insert into public.messages (interest_id, sender, body) values (v_interest, 'interesado', p_body) returning * into v_msg;
+  update public.interests set status = 'conversando' where id = v_interest and status = 'nuevo';
+  return v_msg;
+end $$;
+
+-- ── 6c. Recuperar conversaciones por correo (009) ────────────────────────────
+-- Registro de solicitudes para limitar a 3 por correo cada hora. Solo service_role.
+create table if not exists public.recovery_requests (
+  email      text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists recovery_requests_email on public.recovery_requests (email, created_at);
+alter table public.recovery_requests enable row level security;
+revoke all on public.recovery_requests from anon, authenticated;
+
+-- Devuelve true y anota la solicitud si el correo lleva menos de 3 en la última hora.
+create or replace function public.recovery_allowed(p_email text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_n int;
+begin
+  delete from public.recovery_requests where created_at < now() - interval '1 day';
+  select count(*) into v_n from public.recovery_requests
+   where email = lower(p_email) and created_at > now() - interval '1 hour';
+  if v_n >= 3 then return false; end if;
+  insert into public.recovery_requests (email) values (lower(p_email));
+  return true;
+end $$;
+revoke execute on function public.recovery_allowed(text) from public, anon, authenticated;
+grant execute on function public.recovery_allowed(text) to service_role;
+
 -- ── 7. Saneamiento, semillas, integridad y realtime ──────────────────────────
 -- Equipo: cada cuenta lee su fila; las activas leen a todo el equipo. Nadie más.
 drop policy if exists "equipo: nombre público" on public.members;
@@ -697,6 +776,10 @@ with esperado(tipo, nombre, usado_por) as (values
   ('rpc',     'delete_category',  'admin.html (004)'),
   ('rpc',     'set_offers_for_all','admin.html (006)'),
   ('rpc',     'activar_invitacion','admin.html primer ingreso'),
+  ('rpc',     'discard_interest', 'admin.html (008)'),
+  ('rpc',     'reopen_interest',  'admin.html (008)'),
+  ('tabla',   'recovery_requests','recuperar.js (009)'),
+  ('rpc',     'recovery_allowed', 'recuperar.js (009)'),
   ('rpc',     'setting_on',       'catalog (003)'),
   ('rpc',     'is_member',        'RLS'),
   ('rpc',     'is_admin',         'RLS'),

@@ -120,7 +120,7 @@ El administrador también puede **editar** (nombre, correo, rol, contraseña), *
 
 **Netlify → Site configuration**
 - Environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` sin espacios ni comillas. Tras cambiarlas: Deploys → *Clear cache and deploy site*.
-- Functions: `cuentas` y `avisos` listadas. Si no aparecen, revisar `netlify.toml` y `netlify/functions/package.json`.
+- Functions: `cuentas`, `avisos` y `recuperar` listadas. Si no aparecen, revisar `netlify.toml` y `netlify/functions/package.json`.
 - Domain: si algún día se usa dominio propio, agregarlo también en Redirect URLs de Supabase y en `SITE_URL` de `supabase.js`.
 
 **GitHub**
@@ -185,6 +185,26 @@ No hay que preparar las fotos antes de subirlas. Al elegirlas en el editor, el n
 En catálogo, ficha y editor la foto se ve **completa** dentro de su cuadro (sin recortes), sobre una copia desenfocada de sí misma que rellena el fondo. Las miniaturas pequeñas (tabla, chat, tira de la galería) siguen recortadas al cuadrado porque a ese tamaño solo sirven para reconocer el producto.
 
 Las fotos subidas antes de este cambio se reducen con **Optimizar fotos existentes**, en el editor de cada producto (debajo de la cuadrícula de fotos): descarga cada una, la redimensiona en el navegador, la sube de nuevo y borra la original. Orden y portada se conservan; las que ya pesaban poco se dejan igual. Para que la descarga funcione, el bucket `fotos` debe permitir CORS desde el sitio (Supabase lo hace por defecto en buckets públicos).
+
+## 9. Moderación de conversaciones (008)
+
+Cualquier cuenta activa del equipo (administrador o editor) puede, desde el chat de un interesado:
+
+- **Borrar un mensaje**: icono de papelera al pasar el cursor sobre la hora del mensaje (siempre visible en pantallas táctiles). Pide confirmación; el mensaje desaparece también en el enlace privado de la persona.
+- **Descartar** al interesado: cierra su conversación (ya no puede escribir, ofertar ni pagar), retira su oferta del ranking público, anula pagos no confirmados y, si estaba reservado, el producto vuelve a *Disponible*. Se le muestra un mensaje de cierre editable. Los descartados salen de la bandeja *Todos* y quedan en la pestaña **Descartados**, desde donde se puede **Reabrir**.
+
+Requiere ejecutar `supabase/008-moderacion.sql` (ya incluido en `000-base-completa.sql`, bloque 6b).
+
+## 10. Mis conversaciones (009)
+
+Página pública `/mis-conversaciones` (enlace en la barra superior de catálogo, ficha y hilo):
+
+- Muestra los hilos abiertos **en este dispositivo** (guardados en el navegador).
+- **¿Desde otro dispositivo?**: la persona escribe el correo con que marcó interés; la función `netlify/functions/recuperar.js` busca sus intereses (menos los descartados) y le envía por Resend un correo con un botón *Abrir* por conversación. En pantalla siempre se muestra el mismo mensaje, exista o no el correo, para que nadie pueda sondear correos ajenos.
+- Tope de 3 solicitudes por correo cada hora (tabla `recovery_requests` + RPC `recovery_allowed`, solo `service_role`).
+- Quien dejó teléfono en vez de correo no recibe nada: el equipo le reenvía el enlace privado por WhatsApp (aparece al pie del chat en el panel).
+
+Requiere `supabase/009-recuperar.sql` (incluido en `000-base-completa.sql`, bloque 6c). La función usa las mismas variables de entorno que `avisos.js`; no necesita webhook.
 
 ## Pendiente opcional
 

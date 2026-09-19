@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mis conversaciones — Oferta de Muebles y Electrodomésticos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/src/app.css?v=8">
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">Oferta de Muebles y Electrodomésticos</a>
+  <a href="/">Catálogo</a>
+  <a href="/mis-conversaciones" aria-current="page">Mis conversaciones</a>
+</nav>
+
+<main style="max-width:640px">
+  <section class="section-head" style="padding-bottom:20px">
+    <div class="stack">
+      <span class="kicker">Sin cuenta ni contraseña</span>
+      <h2>Mis conversaciones</h2>
+      <p class="lead">Cada interés que marcas abre un hilo privado con el equipo de venta. Aquí puedes volver a ellos.</p>
+    </div>
+  </section>
+
+  <section id="locales" class="hide" style="display:grid;gap:10px;padding-bottom:28px">
+    <div style="font-size:13px;font-weight:600;color:var(--muted)">En este dispositivo</div>
+    <div id="lista" style="display:grid;gap:8px"></div>
+  </section>
+
+  <section style="display:grid;gap:14px;padding:22px;border:1px solid var(--line);border-radius:12px;background:var(--surface)">
+    <div class="stack" style="gap:4px">
+      <div style="font-size:15px;font-weight:700;letter-spacing:-.01em" id="rec-titulo">¿Desde otro dispositivo?</div>
+      <p class="lead" style="font-size:13.5px">Escribe el correo con el que marcaste interés y te enviamos tus enlaces.</p>
+    </div>
+    <form id="form-rec" style="display:flex;gap:8px;flex-wrap:wrap">
+      <input class="field-input" name="email" type="email" required autocomplete="email" placeholder="tu@correo.cl" aria-label="Correo"
+        style="flex:1;min-width:200px;min-height:42px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;font-weight:500;color:var(--ink)">
+      <button type="submit" class="btn btn-primary">Enviar enlaces</button>
+    </form>
+    <p id="rec-ok" class="hide" style="margin:0;font-size:13px;line-height:1.5;color:var(--ink-2);border-left:2px solid var(--verde);padding:8px 12px;background:var(--wash);border-radius:0 8px 8px 0">
+      Si ese correo tiene conversaciones, recibirás un mensaje con tus enlaces en un minuto. Revisa también la carpeta de spam.
+    </p>
+    <p class="lead" style="font-size:12.5px">Si dejaste un teléfono en vez de correo, escríbele al equipo por WhatsApp y te reenviarán tu enlace.</p>
+  </section>
+</main>
+
+<script type="module">
+import { esc, misTokens, fail, toast, ICON, aplicarTitulo } from '/src/supabase.js';
+aplicarTitulo('Mis conversaciones');
+
+const hilos = misTokens();
+if (hilos.length) {
+  document.getElementById('locales').classList.remove('hide');
+  document.getElementById('lista').innerHTML = hilos.map((h) =>
+    `<a class="btn btn-secondary btn-block" style="justify-content:space-between" href="/c/${esc(h.token)}">
+      <span>${esc(h.title || 'Ver conversación')}</span>${ICON.chat}</a>`).join('');
+  document.getElementById('rec-titulo').textContent = '¿Falta alguna o estás en otro dispositivo?';
+}
+
+document.getElementById('form-rec').onsubmit = async (e) => {
+  e.preventDefault();
+  const form = e.target, btn = form.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    const r = await fetch('/.netlify/functions/recuperar', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: form.email.value.trim() }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo enviar. Intenta de nuevo.');
+    document.getElementById('rec-ok').classList.remove('hide');
+    form.classList.add('hide');
+  } catch (err) { fail(err); btn.disabled = false; btn.textContent = 'Enviar enlaces'; }
+};
+</script>
+</body>
+</html>

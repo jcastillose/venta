@@ -13,6 +13,12 @@
   to = "/c.html"
   status = 200
 
+# Recuperar conversaciones por correo
+[[redirects]]
+  from = "/mis-conversaciones"
+  to = "/mis-conversaciones.html"
+  status = 200
+
 # Detalle de producto: /p/<id>
 [[redirects]]
   from = "/p/*"
