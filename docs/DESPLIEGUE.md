@@ -193,7 +193,10 @@ Cualquier cuenta activa del equipo (administrador o editor) puede, desde el chat
 - **Borrar un mensaje**: icono de papelera al pasar el cursor sobre la hora del mensaje (siempre visible en pantallas táctiles). Pide confirmación; el mensaje desaparece también en el enlace privado de la persona.
 - **Descartar** al interesado: cierra su conversación (ya no puede escribir, ofertar ni pagar), retira su oferta del ranking público, anula pagos no confirmados y, si estaba reservado, el producto vuelve a *Disponible*. Se le muestra un mensaje de cierre editable. Los descartados salen de la bandeja *Todos* y quedan en la pestaña **Descartados**, desde donde se puede **Reabrir**.
 
-Requiere ejecutar `supabase/008-moderacion.sql` (ya incluido en `000-base-completa.sql`, bloque 6b).
+- **Eliminar conversación** (papelera junto a *Conversar* en la bandeja, incluida la pestaña *Descartados*, y al pie del chat): borra el interés con sus mensajes, oferta y pago, y libera el producto si estaba reservado. El enlace privado deja de funcionar. No se permite si el pago ya fue confirmado. RPC `delete_interest` (010).
+- **Datos de contacto** en el chat: franja bajo el encabezado con nombre, correo (enlace *mailto*) o teléfono (enlace *tel* y botón WhatsApp), fecha del interés y cantidad de mensajes.
+
+Requiere ejecutar `supabase/008-moderacion.sql` y `010-eliminar-interes.sql` (ya incluidos en `000-base-completa.sql`, bloques 6b y 6d).
 
 ## 10. Mis conversaciones (009)
 

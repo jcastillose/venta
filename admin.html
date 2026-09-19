@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=8">
+<link rel="stylesheet" href="/src/app.css?v=9">
 </head>
 <body>
 <nav class="nav">
@@ -745,10 +745,11 @@ function vInteresados() {
           <div class="sub">${esc(p.title || '')} · ${esc(i.buyer_contact)}</div>
           <div class="sub" style="color:${esTop ? 'var(--accent)' : 'var(--ink-2)'};font-weight:600">${of ? `Ofrece ${clp(of.amount_clp)}${esTop ? ' · oferta más alta' : ''}` : `Pide al precio publicado ${clp(p.price_clp)}`}</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${i.status !== 'reservado' && i.status !== 'vendido' && i.status !== 'descartado' && p.status !== 'vendido'
             ? `<button class="btn btn-secondary" data-res="${i.id}">Reservar</button>` : ''}
           <button class="btn btn-primary" data-chat="${i.id}">${ICON.chat}Conversar</button>
+          ${y?.status === 'pagado' ? '' : `<button class="btn btn-secondary btn-danger" data-del-int="${i.id}" title="Eliminar conversación" aria-label="Eliminar conversación" style="padding:0;width:38px;justify-content:center">${ICON.trash}</button>`}
         </div>
       </article>`; }).join('')}
       ${lista.length ? '' : `<div class="empty" style="margin-top:16px">${filtro === 'Descartados' ? 'No hay conversaciones descartadas.' : 'Nadie por aquí todavía. Cuando alguien marque interés aparecerá en esta bandeja.'}</div>`}
@@ -762,9 +763,35 @@ function vInteresados() {
     if (error) return fail(error);
     toast('Reservado'); recargar();
   });
+  view.querySelectorAll('[data-del-int]').forEach((b) => b.onclick = () => eliminarInteres(b.dataset.delInt, recargar));
+}
+
+// Elimina el hilo completo (mensajes, oferta y pago) con confirmación. El enlace privado deja de funcionar.
+async function eliminarInteres(id, despues) {
+  const i = intereses.find((x) => x.id === id); if (!i) return;
+  const p = prod(i.product_id) || {};
+  const libera = i.status === 'reservado' ? ' El producto vuelve a Disponible.' : '';
+  if (!confirm(`¿Eliminar la conversación de ${i.buyer_name} sobre «${p.title || 'este producto'}»?\n\nSe borran sus mensajes, su oferta y su enlace privado. No se puede deshacer.${libera}`)) return;
+  const { error } = await sb.rpc('delete_interest', { p_interest: id });
+  if (error) return fail(error);
+  toast('Conversación eliminada'); despues();
 }
 
 /* ── chat del equipo ────────────────────────────────────────────── */
+const esCorreo = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+const esTelefono = (s) => /^\+?[\d\s().-]{8,}$/.test(String(s || '').trim());
+function contactoTipo(c) { return esCorreo(c) ? 'Correo' : esTelefono(c) ? 'Teléfono / WhatsApp' : 'Contacto'; }
+function contactoHTML(c) {
+  const t = String(c || '').trim();
+  if (esCorreo(t)) return `<a href="mailto:${esc(t)}">${esc(t)}</a>`;
+  if (esTelefono(t)) {
+    let d = t.replace(/\D/g, '');
+    if (d.length === 9 && d.startsWith('9')) d = '56' + d;   // celular chileno sin código de país
+    return `<span style="display:flex;gap:10px;flex-wrap:wrap"><a href="tel:+${d}">${esc(t)}</a><a href="https://wa.me/${d}" target="_blank" rel="noopener">WhatsApp ↗</a></span>`;
+  }
+  return `<span>${esc(t)}</span>`;
+}
+
 async function vChat() {
   const i = intereses.find((x) => x.id === ctx.interestId);
   if (!i) return ir('interesados');
@@ -809,10 +836,16 @@ async function vChat() {
         ${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
         <div style="flex:1;min-width:160px">
           <div style="font-size:15px;font-weight:600;letter-spacing:-.01em">${esc(p.title || '')}</div>
-          <div class="sub">${esc(i.buyer_name)} · ${esc(i.buyer_contact)} · ${oferta(i.id) ? `ofrece <strong>${clp(oferta(i.id).amount_clp)}</strong> (precio ${clp(p.price_clp)})` : `precio publicado ${clp(p.price_clp)}`}</div>
+          <div class="sub">${oferta(i.id) ? `Ofrece <strong>${clp(oferta(i.id).amount_clp)}</strong> · precio publicado ${clp(p.price_clp)}` : `Pide al precio publicado ${clp(p.price_clp)}`}</div>
         </div>
         ${estadoHTML(ESTADO_INTERES, i.status)}
       </header>
+      <div class="contacto">
+        <div class="stack"><span class="k">Nombre</span><strong>${esc(i.buyer_name)}</strong></div>
+        <div class="stack"><span class="k">${contactoTipo(i.buyer_contact)}</span>${contactoHTML(i.buyer_contact)}</div>
+        <div class="stack"><span class="k">Marcó interés</span><span>${fecha(i.created_at)}</span></div>
+        <div class="stack"><span class="k">Mensajes</span><span>${(ms || []).length}</span></div>
+      </div>
       <div class="log" id="log">
         <p class="sys">Conversación privada con ${esc(i.buyer_name)} sobre este producto.</p>
         ${(ms || []).map((m) => `<div class="msg ${m.sender === 'vendedor' ? 'mine' : ''}" data-msg="${m.id}">
@@ -826,8 +859,10 @@ async function vChat() {
         <button type="submit" aria-label="Enviar">${ICON.send}</button></form>`}
     </section>
     ${franja}${acciones}
-    <p class="lead" style="max-width:780px;margin-top:14px;font-size:12.5px">Enlace privado de esta persona: <code>${esc(location.origin)}/c/${esc(i.token)}</code></p>`;
+    <p class="lead" style="max-width:780px;margin-top:14px;font-size:12.5px;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><span style="margin-right:auto">Enlace privado de esta persona: <code>${esc(location.origin)}/c/${esc(i.token)}</code></span>
+      ${y?.status === 'pagado' ? '' : `<button class="btn btn-ghost btn-danger" id="btn-eliminar-int" style="font-size:12.5px">${ICON.trash}Eliminar conversación</button>`}</p>`;
 
+  document.getElementById('btn-eliminar-int')?.addEventListener('click', () => eliminarInteres(i.id, () => ir(ctx.back || 'interesados')));
   document.getElementById('volver').onclick = () => ir(ctx.back || 'interesados');
   const log = document.getElementById('log'); log.scrollTop = log.scrollHeight;
 
