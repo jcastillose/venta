@@ -148,7 +148,7 @@ function pintar() {
     cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. ${ajustes.ofertas_habilitadas
         ? 'Al mostrar tu interés se abre una conversación privada con quien vende para coordinar la reserva.'
         : 'Al marcar interés se abre una conversación privada con quien vende.'}</p>
-      <p class="lead" style="display:flex;align-items:center;gap:8px"><span class="icon" style="display:inline-grid;width:15px;height:15px;flex:none;color:var(--accent)">${ICON.card}</span><span>Al reservar pagas con ${esc(metodosTexto())}.</span></p>
+      <p class="lead" style="display:flex;align-items:center;gap:8px"><span class="icon" style="display:inline-grid;width:15px;height:15px;flex:none;color:var(--accent)">${ICON.card}</span><span>Posibilidad de reservar.</span></p>
       <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}${ajustes.ofertas_habilitadas ? 'Me interesa / ofertar' : 'Me interesa'}</button></div>`;
     document.getElementById('btn-interes').onclick = abrir;
   }
