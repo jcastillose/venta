@@ -218,3 +218,14 @@ Requiere `supabase/009-recuperar.sql` (incluido en `000-base-completa.sql`, bloq
 En el editor de cada producto, campo **Visibilidad**: *Visible en el catálogo* (por defecto) u *Oculto (solo el equipo lo ve)*. Un producto oculto no aparece en el catálogo ni abre su ficha pública, y nadie puede marcar interés en él; los hilos ya abiertos siguen funcionando. En la tabla de Productos se marca con la etiqueta **Oculto**. Útil para preparar una publicación o retirarla sin borrarla.
 
 Requiere `supabase/011-visibilidad.sql` (incluido en `000-base-completa.sql`: columna `products.is_public`, vista `catalog`, política de lectura y `create_interest`).
+
+## 12. Medidas y borrado por el interesado (012)
+
+- **Medidas**: en el editor de producto, cuatro campos opcionales (ancho, alto, profundidad en cm; peso en kg). La ficha pública muestra solo los completados: «Medidas 120 × 80 × 45 cm · ancho × alto × prof.» y «Peso 32 kg».
+- **Borrar conversación**: al pie de su hilo, la persona puede borrarlo (mensajes, oferta y enlace); si estaba reservado, el producto vuelve a *Disponible*. No se permite si el pago ya fue confirmado ni si el producto está vendido. En *Mis conversaciones* la **×** solo la quita de ese dispositivo, sin borrarla. RPC `delete_thread_by_token`.
+
+Requiere `supabase/012-medidas-borrar-hilo.sql` (incluido en `000-base-completa.sql`).
+
+## 13. Nombre del remitente de los correos
+
+El nombre visible («venta.hogar») vive en la variable `MAIL_FROM` de Netlify, con el formato `Nombre visible <correo>`. Para cambiarlo: Site configuration → Environment variables → `MAIL_FROM` → Edit → p. ej. `Oferta de Muebles y Electrodomésticos <admin@contact.agencements.net>` → Save → Deploys → *Clear cache and deploy site*. Si configuraste el SMTP de Supabase con Resend, cambia también allí *Sender name*.

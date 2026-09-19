@@ -24,7 +24,7 @@ Site configuration → Environment variables:
 | Variable | Valor |
 | --- | --- |
 | `RESEND_API_KEY` | `re_...` |
-| `MAIL_FROM` | `venta.hogar <avisos@tudominio.cl>` (o `onboarding@resend.dev` para probar) |
+| `MAIL_FROM` | `Nombre visible <avisos@tudominio.cl>`, p. ej. `Oferta de Muebles y Electrodomésticos <admin@contact.agencements.net>` (o `onboarding@resend.dev` para probar). Lo que va antes de `<` es el nombre que ve quien recibe el correo. |
 | `AVISOS_SECRET` | una frase larga que inventes, ej. `mv-avisos-9f2c81b07d` |
 | `SUPABASE_URL` | `https://bxsldfwlbagvgxxhtfwc.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | la clave `service_role` de Supabase |

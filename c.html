@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=10">
+<link rel="stylesheet" href="/src/app.css?v=11">
 </head>
 <body>
 <nav class="nav">
@@ -50,7 +50,7 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, hora, ESTADO_INTERES, ESTADO_PAGO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, METODOS, ICON, guardarToken, aplicarTitulo } from '/src/supabase.js';
+import { sb, clp, esc, hora, ESTADO_INTERES, ESTADO_PAGO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, METODOS, ICON, guardarToken, olvidarToken, aplicarTitulo } from '/src/supabase.js';
 
 aplicarTitulo('Mi conversación');
 
@@ -75,6 +75,20 @@ async function cargar() {
   cover = fs?.[0]?.storage_path || null;
   opciones = op || [];
   pintar();
+}
+
+function puedeBorrar() {
+  if (hilo.interest_status === 'vendido' || hilo.product_status === 'vendido') return false;
+  return hilo.payment_status !== 'pagado';
+}
+async function borrarHilo() {
+  const reservado = hilo.interest_status === 'reservado' ? '\n\nTu reserva se libera y el producto vuelve a estar disponible para otras personas.' : '';
+  if (!confirm(`¿Borrar tu conversación sobre «${hilo.product_title}»?\n\nSe eliminan tus mensajes y tu oferta, y este enlace deja de funcionar. No se puede deshacer.${reservado}`)) return;
+  const { error } = await sb.rpc('delete_thread_by_token', { p_token: token });
+  if (error) return fail(error);
+  olvidarToken(token);
+  toast('Conversación borrada');
+  setTimeout(() => location.href = '/mis-conversaciones', 900);
 }
 
 function pagoEstado() {
@@ -157,7 +171,10 @@ function pintar() {
         <button type="submit" aria-label="Enviar">${ICON.send}</button>
       </form>`}
     </section>
-    ${hilo.interest_status === 'descartado' ? '' : franjaOferta() + franjaPago()}`;
+    ${hilo.interest_status === 'descartado' ? '' : franjaOferta() + franjaPago()}
+    ${puedeBorrar() ? `<p class="lead" style="font-size:12.5px;margin-top:22px;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><span style="margin-right:auto">¿Ya no te interesa? Puedes cerrar y borrar esta conversación.</span><button type="button" class="btn btn-ghost btn-danger" id="btn-borrar-hilo" style="font-size:12.5px">${ICON.trash}Borrar conversación</button></p>` : ''}`;
+
+  document.getElementById('btn-borrar-hilo')?.addEventListener('click', borrarHilo);
 
   const log = document.getElementById('log');
   log.scrollTop = log.scrollHeight;

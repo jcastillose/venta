@@ -71,6 +71,10 @@ create table if not exists public.products (
 );
 alter table public.products add column if not exists accepts_offers boolean not null default true;
 alter table public.products add column if not exists is_public boolean not null default true;  -- 011: visible en el catálogo
+alter table public.products add column if not exists width_cm  numeric(7,1);  -- 012: medidas opcionales
+alter table public.products add column if not exists height_cm numeric(7,1);
+alter table public.products add column if not exists depth_cm  numeric(7,1);
+alter table public.products add column if not exists weight_kg numeric(7,1);
 
 -- Fotos: archivos del bucket "fotos". position 0 = portada.
 create table if not exists public.product_photos (
@@ -718,6 +722,27 @@ begin
 end $$;
 grant execute on function public.delete_interest(uuid) to authenticated;
 
+-- ── 6e. El interesado borra su conversación (012) ────────────────────────────
+-- (c) El interesado borra su propia conversación con su token. Se elimina el hilo
+-- completo (mensajes, oferta y pago en cascada); si estaba reservado, el producto
+-- vuelve a disponible. No se permite si el pago ya fue confirmado ni si está vendido.
+create or replace function public.delete_thread_by_token(p_token text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_id uuid; v_product uuid; v_status public.interest_status;
+begin
+  select id, product_id, status into v_id, v_product, v_status from public.interests where token = p_token;
+  if v_id is null then return; end if;
+  if v_status = 'vendido' then raise exception 'Este trato ya se cerró: no se puede borrar'; end if;
+  if exists (select 1 from public.payments where interest_id = v_id and status = 'pagado') then
+    raise exception 'Hay un pago confirmado: escribe al equipo para cerrar la conversación';
+  end if;
+  delete from public.interests where id = v_id;
+  if v_status = 'reservado' then
+    update public.products set status = 'disponible' where id = v_product and status = 'reservado';
+  end if;
+end $$;
+grant execute on function public.delete_thread_by_token(text) to anon, authenticated;
+
 -- ── 7. Saneamiento, semillas, integridad y realtime ──────────────────────────
 -- Equipo: cada cuenta lee su fila; las activas leen a todo el equipo. Nadie más.
 drop policy if exists "equipo: nombre público" on public.members;
@@ -804,6 +829,8 @@ with esperado(tipo, nombre, usado_por) as (values
   ('tabla',   'recovery_requests','recuperar.js (009)'),
   ('rpc',     'recovery_allowed', 'recuperar.js (009)'),
   ('rpc',     'delete_interest',  'admin.html (010)'),
+  ('columna', 'products.width_cm', 'medidas (012)'),
+  ('rpc',     'delete_thread_by_token', 'c.html (012)'),
   ('rpc',     'setting_on',       'catalog (003)'),
   ('rpc',     'is_member',        'RLS'),
   ('rpc',     'is_admin',         'RLS'),

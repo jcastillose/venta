@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=10">
+<link rel="stylesheet" href="/src/app.css?v=11">
 </head>
 <body>
 <nav class="nav">
@@ -71,6 +71,16 @@ function metodosTexto() {
     : metodos[0];
 }
 
+// Medidas: solo las registradas. Ancho × alto × profundidad en una línea, peso aparte.
+const fmt = (n) => Number(n).toLocaleString('es-CL', { maximumFractionDigits: 1 });
+function medidasHTML(p) {
+  const dims = [['Ancho', p.width_cm], ['Alto', p.height_cm], ['Prof.', p.depth_cm]].filter(([, v]) => v != null && v !== '');
+  const out = [];
+  if (dims.length) out.push(`<div><span class="k">Medidas</span>${dims.map(([k, v]) => `${fmt(v)} cm`).join(' × ')}<span style="color:var(--muted)"> · ${dims.map(([k]) => k.toLowerCase()).join(' × ')}</span></div>`);
+  if (p.weight_kg != null && p.weight_kg !== '') out.push(`<div><span class="k">Peso</span>${fmt(p.weight_kg)} kg</div>`);
+  return out.join('');
+}
+
 function pintar() {
   const p = prod;
   const yaTengo = misTokens().find((t) => t.productId === p.id);
@@ -103,6 +113,7 @@ function pintar() {
       <div class="specs">
         <div><span class="k">Retiro</span>${esc(p.lugar || '—')}</div>
         <div><span class="k">Condición</span>${esc(condicionLabel(p.condicion))}</div>
+        ${medidasHTML(p)}
         <div><span class="k">Publicado</span>${fecha(p.created_at)}</div>
         ${ajustes.ofertas_habilitadas && ajustes.ofertas_publicas ? `<div><span class="k">Oferta más alta</span>${p.top_offer_clp ? `<strong style="color:var(--accent)">${clp(p.top_offer_clp)}</strong> <span style="color:var(--muted)">· ${p.offer_count} ${p.offer_count === 1 ? 'oferta' : 'ofertas'}</span>` : '<span style="color:var(--muted)">Sin ofertas aún</span>'}</div>` : ''}
       </div>

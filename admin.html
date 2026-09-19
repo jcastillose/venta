@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=10">
+<link rel="stylesheet" href="/src/app.css?v=11">
 </head>
 <body>
 <nav class="nav">
@@ -566,7 +566,15 @@ function vEditor() {
             ${CONDICIONES.map(([v, l]) => `<option value="${v}" ${p.condicion === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select><span class="hint" id="condicion-hint"></span></label>
         </div>
-        <label class="field">Descripción<textarea name="description" rows="5" placeholder="Medidas, marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
+        <label class="field">Descripción<textarea name="description" rows="5" placeholder="Marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
+        <div class="field"><span>Medidas <span class="hint" style="display:inline;font-weight:400">(opcionales; solo se muestran las que completes)</span></span>
+          <div class="row" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
+            <label class="field" style="font-weight:400">Ancho (cm)<input name="width_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.width_cm ?? ''}"></label>
+            <label class="field" style="font-weight:400">Alto (cm)<input name="height_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.height_cm ?? ''}"></label>
+            <label class="field" style="font-weight:400">Profundidad (cm)<input name="depth_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.depth_cm ?? ''}"></label>
+            <label class="field" style="font-weight:400">Peso (kg)<input name="weight_kg" type="number" step="0.1" min="0" inputmode="decimal" value="${p.weight_kg ?? ''}"></label>
+          </div>
+        </div>
         <div class="row">
           <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
             `<option value="${k}" ${p.status === k ? 'selected' : ''}>${ESTADO[k].label}</option>`).join('')}</select></label>
@@ -600,7 +608,8 @@ function vEditor() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
-    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, accepts_offers: fd.accepts_offers !== 'false', is_public: fd.is_public !== 'false', updated_at: new Date().toISOString(), updated_by: me.id };
+    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, accepts_offers: fd.accepts_offers !== 'false', is_public: fd.is_public !== 'false',
+      width_cm: num(fd.width_cm), height_cm: num(fd.height_cm), depth_cm: num(fd.depth_cm), weight_kg: num(fd.weight_kg), updated_at: new Date().toISOString(), updated_by: me.id };
     const btn = form.querySelector('button');
     btn.disabled = true;
     let error, id = ctx.id;
@@ -780,6 +789,8 @@ async function eliminarInteres(id, despues) {
   if (error) return fail(error);
   toast('Conversación eliminada'); despues();
 }
+
+const num = (v) => (v === '' || v == null || isNaN(+v)) ? null : +v;
 
 /* ── chat del equipo ────────────────────────────────────────────── */
 const esCorreo = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());

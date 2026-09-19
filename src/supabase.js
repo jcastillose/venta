@@ -130,3 +130,6 @@ export function guardarToken(t, productTitle) {
   all.unshift({ token: t, title: productTitle, at: Date.now() });
   localStorage.setItem(KEY, JSON.stringify(all.slice(0, 40)));
 }
+export function olvidarToken(t) {
+  localStorage.setItem(KEY, JSON.stringify(misTokens().filter((x) => x.token !== t)));
+}

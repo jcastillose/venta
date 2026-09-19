@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=10">
+<link rel="stylesheet" href="/src/app.css?v=11">
 </head>
 <body>
 <nav class="nav">
@@ -49,15 +49,20 @@
 </main>
 
 <script type="module">
-import { esc, misTokens, fail, toast, ICON, aplicarTitulo } from '/src/supabase.js';
+import { esc, misTokens, olvidarToken, fail, toast, ICON, aplicarTitulo } from '/src/supabase.js';
 aplicarTitulo('Mis conversaciones');
 
 const hilos = misTokens();
 if (hilos.length) {
   document.getElementById('locales').classList.remove('hide');
   document.getElementById('lista').innerHTML = hilos.map((h) =>
-    `<a class="btn btn-secondary btn-block" style="justify-content:space-between" href="/c/${esc(h.token)}">
-      <span>${esc(h.title || 'Ver conversación')}</span>${ICON.chat}</a>`).join('');
+    `<div style="display:flex;gap:8px;align-items:stretch"><a class="btn btn-secondary btn-block" style="justify-content:space-between;flex:1" href="/c/${esc(h.token)}">
+      <span>${esc(h.title || 'Ver conversación')}</span>${ICON.chat}</a>
+      <button type="button" class="btn btn-secondary" data-quitar="${esc(h.token)}" title="Quitar de este dispositivo" aria-label="Quitar de este dispositivo" style="padding:0;width:42px;justify-content:center">×</button></div>`).join('');
+  document.querySelectorAll('[data-quitar]').forEach((b) => b.onclick = () => {
+    olvidarToken(b.dataset.quitar); b.closest('div').remove();
+    toast('Quitada de este dispositivo. La conversación sigue existiendo; para borrarla ábrela y usa «Borrar conversación».');
+  });
   document.getElementById('rec-titulo').textContent = '¿Falta alguna o estás en otro dispositivo?';
 }
 
