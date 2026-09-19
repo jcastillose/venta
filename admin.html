@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=11">
+<link rel="stylesheet" href="/src/app.css?v=12">
 </head>
 <body>
 <nav class="nav">
@@ -567,13 +567,15 @@ function vEditor() {
           </select><span class="hint" id="condicion-hint"></span></label>
         </div>
         <label class="field">Descripción<textarea name="description" rows="5" placeholder="Marca, uso, detalles a considerar…">${esc(p.description || '')}</textarea></label>
-        <div class="field"><span>Medidas <span class="hint" style="display:inline;font-weight:400">(opcionales; solo se muestran las que completes)</span></span>
-          <div class="row" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
-            <label class="field" style="font-weight:400">Ancho (cm)<input name="width_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.width_cm ?? ''}"></label>
-            <label class="field" style="font-weight:400">Alto (cm)<input name="height_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.height_cm ?? ''}"></label>
-            <label class="field" style="font-weight:400">Profundidad (cm)<input name="depth_cm" type="number" step="0.1" min="0" inputmode="decimal" value="${p.depth_cm ?? ''}"></label>
-            <label class="field" style="font-weight:400">Peso (kg)<input name="weight_kg" type="number" step="0.1" min="0" inputmode="decimal" value="${p.weight_kg ?? ''}"></label>
+        <fieldset class="medidas">
+          <legend>Medidas <span class="hint">Opcionales. Solo se muestran las que completes.</span></legend>
+          <div class="grid">
+            <label class="field">Ancho<span class="unit-wrap"><input name="width_cm" type="number" step="0.1" min="0" inputmode="decimal" placeholder="—" value="${p.width_cm ?? ''}"><span class="unit">cm</span></span></label>
+            <label class="field">Alto<span class="unit-wrap"><input name="height_cm" type="number" step="0.1" min="0" inputmode="decimal" placeholder="—" value="${p.height_cm ?? ''}"><span class="unit">cm</span></span></label>
+            <label class="field">Profundidad<span class="unit-wrap"><input name="depth_cm" type="number" step="0.1" min="0" inputmode="decimal" placeholder="—" value="${p.depth_cm ?? ''}"><span class="unit">cm</span></span></label>
+            <label class="field">Peso<span class="unit-wrap"><input name="weight_kg" type="number" step="0.1" min="0" inputmode="decimal" placeholder="—" value="${p.weight_kg ?? ''}"><span class="unit">kg</span></span></label>
           </div>
+        </fieldset>
         </div>
         <div class="row">
           <label class="field">Estado<select name="status">${Object.keys(ESTADO).map((k) =>
