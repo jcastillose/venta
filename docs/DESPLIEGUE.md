@@ -212,3 +212,9 @@ Requiere `supabase/009-recuperar.sql` (incluido en `000-base-completa.sql`, bloq
 ## Pendiente opcional
 
 - Cobro real con MercadoPago Checkout Pro: crear la preferencia en una function y marcar el pago como `pagado` desde el webhook en lugar de la confirmación manual. Prex y transferencia se mantienen declarativos.
+
+## 11. Visibilidad por producto (011)
+
+En el editor de cada producto, campo **Visibilidad**: *Visible en el catálogo* (por defecto) u *Oculto (solo el equipo lo ve)*. Un producto oculto no aparece en el catálogo ni abre su ficha pública, y nadie puede marcar interés en él; los hilos ya abiertos siguen funcionando. En la tabla de Productos se marca con la etiqueta **Oculto**. Útil para preparar una publicación o retirarla sin borrarla.
+
+Requiere `supabase/011-visibilidad.sql` (incluido en `000-base-completa.sql`: columna `products.is_public`, vista `catalog`, política de lectura y `create_interest`).

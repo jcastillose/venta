@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=9">
+<link rel="stylesheet" href="/src/app.css?v=10">
 </head>
 <body>
 <nav class="nav">
@@ -490,7 +490,7 @@ function vProductos() {
         const f = fotoUrl(fotos(p.id)[0]?.storage_path);
         return `<tr>
           <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
-            <div class="stack"><strong>${esc(p.title)}</strong><span class="sub">${esc(p.category)} · ${fotos(p.id).length} fotos</span></div></div></td>
+            <div class="stack"><strong>${esc(p.title)}${p.is_public === false ? ' <span class="tag-oculto">Oculto</span>' : ''}</strong><span class="sub">${esc(p.category)} · ${fotos(p.id).length} fotos</span></div></div></td>
           <td class="num"><div class="stack">${clp(p.price_clp)}${topOferta(p.id) ? `<span class="sub" style="font-weight:500">Oferta máx. ${clp(topOferta(p.id))}</span>` : ''}</div></td>
           <td><div class="cellflex"><span class="dot" style="background:${ESTADO[p.status].color}"></span>
             <select data-status="${p.id}">${Object.keys(ESTADO).map((k) =>
@@ -528,7 +528,7 @@ function vProductos() {
 
 /* ── editor ─────────────────────────────────────────────────────── */
 function vEditor() {
-  const p = ctx.id ? prod(ctx.id) : { title: '', category: CATEGORIAS[0] || '', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible', accepts_offers: ajustes.ofertas_habilitadas !== false };
+  const p = ctx.id ? prod(ctx.id) : { title: '', category: CATEGORIAS[0] || '', price_clp: '', description: '', lugar: '', condicion: '', status: 'disponible', is_public: true, accepts_offers: ajustes.ofertas_habilitadas !== false };
   const fs = ctx.id ? fotos(ctx.id) : [];
   view.innerHTML = `
     <div style="padding-top:20px"><button class="btn btn-ghost" id="volver">${ICON.back}Productos</button></div>
@@ -574,6 +574,10 @@ function vEditor() {
             <option value="true" ${p.accepts_offers !== false ? 'selected' : ''}>Acepta ofertas</option>
             <option value="false" ${p.accepts_offers === false ? 'selected' : ''}>Precio fijo (sin ofertas)</option>
           </select><span class="hint">Solo afecta a este producto. El interruptor general está en Ajustes.</span></label>
+          <label class="field">Visibilidad<select name="is_public">
+            <option value="true" ${p.is_public !== false ? 'selected' : ''}>Visible en el catálogo</option>
+            <option value="false" ${p.is_public === false ? 'selected' : ''}>Oculto (solo el equipo lo ve)</option>
+          </select><span class="hint">Oculto: no aparece en el catálogo ni se abre su ficha; los hilos ya abiertos siguen funcionando.</span></label>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:8px">
           <button class="btn btn-primary" style="padding:12px 20px;font-size:14px">${ctx.id ? 'Guardar cambios' : 'Publicar'}</button>
@@ -596,7 +600,7 @@ function vEditor() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(form));
-    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, accepts_offers: fd.accepts_offers !== 'false', updated_at: new Date().toISOString(), updated_by: me.id };
+    const payload = { ...fd, price_clp: Number(fd.price_clp) || 0, condicion: fd.condicion || null, accepts_offers: fd.accepts_offers !== 'false', is_public: fd.is_public !== 'false', updated_at: new Date().toISOString(), updated_by: me.id };
     const btn = form.querySelector('button');
     btn.disabled = true;
     let error, id = ctx.id;

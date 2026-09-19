@@ -70,6 +70,7 @@ create table if not exists public.products (
   updated_at  timestamptz not null default now()
 );
 alter table public.products add column if not exists accepts_offers boolean not null default true;
+alter table public.products add column if not exists is_public boolean not null default true;  -- 011: visible en el catálogo
 
 -- Fotos: archivos del bucket "fotos". position 0 = portada.
 create table if not exists public.product_photos (
@@ -198,7 +199,7 @@ alter table public.payments         enable row level security;
 
 -- Catálogo público (incluye vendidos: la UI los muestra con etiqueta).
 drop policy if exists "productos: lectura pública" on public.products;
-create policy "productos: lectura pública" on public.products for select using (true);
+create policy "productos: lectura pública" on public.products for select using (is_public or public.is_member());
 
 drop policy if exists "fotos: lectura pública" on public.product_photos;
 create policy "fotos: lectura pública" on public.product_photos for select using (true);
@@ -490,7 +491,8 @@ create view public.catalog as
          case when public.setting_on('ofertas_publicas') then coalesce(o.offer_count, 0) else 0 end as offer_count
   from public.products p
   join public.members m on m.id = p.created_by
-  left join public.offer_summary o on o.product_id = p.id;
+  left join public.offer_summary o on o.product_id = p.id
+  where p.is_public;  -- 011: los ocultos solo los ve el panel
 grant select on public.catalog to anon, authenticated;
 
 -- Interruptor global: cambia el ajuste y el estado de todos los productos a la vez.
@@ -543,13 +545,13 @@ create or replace function public.create_interest(
   p_product uuid, p_name text, p_contact text, p_message text default null, p_offer integer default null)
 returns text
 language plpgsql security definer set search_path = public as $$
-declare v_token text; v_id uuid; v_on boolean;
+declare v_token text; v_id uuid; v_on boolean; v_public boolean;
 begin
   if coalesce(trim(p_name), '') = '' or coalesce(trim(p_contact), '') = '' then
     raise exception 'Nombre y contacto son obligatorios';
   end if;
-  select accepts_offers into v_on from public.products where id = p_product and status <> 'vendido';
-  if v_on is null then raise exception 'Producto no disponible'; end if;
+  select accepts_offers, is_public into v_on, v_public from public.products where id = p_product and status <> 'vendido';
+  if v_on is null or not v_public then raise exception 'Producto no disponible'; end if;
   if not v_on then p_offer := null; end if;
   if p_offer is not null and p_offer <= 0 then
     raise exception 'La oferta debe ser mayor que cero';
@@ -780,6 +782,7 @@ with esperado(tipo, nombre, usado_por) as (values
   ('vista',   'payment_options',  'producto.html'),
   ('vista',   'offer_summary',    'catalog, RPC'),
   ('columna', 'products.accepts_offers', 'ofertas por producto (006)'),
+  ('columna', 'products.is_public', 'visibilidad pública (011)'),
   ('columna', 'products.lugar',   'editor'),
   ('columna', 'products.condicion','editor (004)'),
   ('columna', 'members.last_seen','admin.html'),
