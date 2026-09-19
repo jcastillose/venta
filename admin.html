@@ -69,7 +69,7 @@
 
 <script type="module">
 import { sb, SITE_URL, clp, esc, fecha, hora, cargarCategorias, CONDICIONES, condicionLabel, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
-         estadoHTML, fotoUrl, fail, toast, ICON, aplicarTitulo, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
+         estadoHTML, fotoUrl, fotoHTML, fail, toast, ICON, aplicarTitulo, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
 
 let tituloActual = TITULO_BASE;
 aplicarTitulo('Administración').then((t) => { tituloActual = t; });
@@ -538,7 +538,7 @@ function vEditor() {
         <span class="kicker">Fotografías</span>
         ${ctx.id ? `<div class="photos">
           ${fs.map((f, i) => `<div class="photo ${i === 0 ? 'cover' : ''}">
-            <img src="${fotoUrl(f.storage_path)}" alt="">
+            ${fotoHTML(fotoUrl(f.storage_path))}
             ${i === 0 ? '<span class="badge">Portada</span>' : ''}
             <div class="tools">
               ${i === 0 ? '' : `<button type="button" data-cover="${f.id}">Usar de portada</button>`}
@@ -547,7 +547,8 @@ function vEditor() {
           <label class="dropzone">${ICON.plus}Añadir fotos
             <input type="file" accept="image/*" multiple hidden id="subir"></label>
         </div>
-        <p class="lead" style="font-size:12.5px">La portada es la foto que aparece en el catálogo. Se suben al bucket <code>fotos</code> de Supabase.</p>`
+        <p class="lead" style="font-size:12.5px">La portada es la foto que aparece en el catálogo. Se suben al bucket <code>fotos</code> de Supabase.</p>
+        ${fs.length ? `<button type="button" class="btn btn-ghost" id="optimizar" style="justify-self:start;font-size:12.5px">Optimizar fotos existentes</button>` : ''}`
         : '<p class="lead">Guarda el producto y podrás subir sus fotografías.</p>'}
       </div>
       <form class="form" id="form-prod">
@@ -615,9 +616,11 @@ function vEditor() {
     const files = [...e.target.files];
     e.target.value = '';
     if (!files.length) return;
-    toast(`Subiendo ${files.length} ${files.length === 1 ? 'foto' : 'fotos'}…`);
+    toast(`Preparando y subiendo ${files.length} ${files.length === 1 ? 'foto' : 'fotos'}…`);
     let pos = fotos(ctx.id).length;
-    for (const file of files) {
+    for (const original of files) {
+      const file = await optimizarFoto(original);
+      if (!file) { fail(new Error(`${original.name}: formato no compatible con los navegadores (HEIC u otro). Expórtala como JPG y vuelve a subirla.`)); continue; }
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `${ctx.id}/${crypto.randomUUID()}.${ext}`;
       const up = await sb.storage.from('fotos').upload(path, file, { contentType: file.type, upsert: false });
@@ -627,6 +630,35 @@ function vEditor() {
     }
     await cargar();
     render();
+  });
+
+  // Vuelve a subir las fotos ya publicadas pasadas por optimizarFoto (mismo orden, misma portada).
+  document.getElementById('optimizar')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const fsNow = [...fotos(ctx.id)];
+    if (!confirm(`Se descargan y vuelven a subir ${fsNow.length} ${fsNow.length === 1 ? 'foto' : 'fotos'} reducidas a 1600 px. La portada y el orden no cambian. ¿Continuar?`)) return;
+    btn.disabled = true;
+    let hechas = 0, omitidas = 0;
+    for (const f of fsNow) {
+      btn.textContent = `Optimizando ${hechas + omitidas + 1} / ${fsNow.length}…`;
+      try {
+        const r = await fetch(fotoUrl(f.storage_path), { cache: 'no-store' });
+        if (!r.ok) throw new Error('No se pudo descargar');
+        const blob = await r.blob();
+        const original = new File([blob], f.storage_path.split('/').pop(), { type: blob.type || 'image/jpeg' });
+        const nueva = await optimizarFoto(original);
+        if (!nueva || nueva === original) { omitidas++; continue; }   // ya era liviana o no se pudo leer
+        const path = `${ctx.id}/${crypto.randomUUID()}.jpg`;
+        const up = await sb.storage.from('fotos').upload(path, nueva, { contentType: 'image/jpeg', upsert: false });
+        if (up.error) throw up.error;
+        const upd = await sb.from('product_photos').update({ storage_path: path }).eq('id', f.id);
+        if (upd.error) throw upd.error;
+        await sb.storage.from('fotos').remove([f.storage_path]);
+        hechas++;
+      } catch (err) { fail(err); omitidas++; }
+    }
+    await cargar(); render();
+    toast(`${hechas} ${hechas === 1 ? 'foto optimizada' : 'fotos optimizadas'}${omitidas ? ` · ${omitidas} sin cambios` : ''}`);
   });
 
   view.querySelectorAll('[data-cover]').forEach((b) => b.onclick = async () => {
@@ -646,6 +678,29 @@ function vEditor() {
     if (error) return fail(error);
     await cargar(); render();
   });
+}
+
+/* Redimensiona la foto en el navegador antes de subirla: lado mayor ≤ FOTO_MAX px, JPEG al 86 %,
+   orientación EXIF aplicada. Así todas pesan poco (≈200–400 KB) y cargan rápido en el catálogo.
+   Devuelve null si el navegador no puede leer el archivo (p. ej. HEIC de iPhone en Chrome). */
+const FOTO_MAX = 1600;
+async function optimizarFoto(file) {
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(file.name)) return null;
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch { return /image\/(jpeg|png|webp|gif)/.test(file.type) ? file : null; }
+  try {
+    const k = Math.min(1, FOTO_MAX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close();
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.86));
+    if (!blob) return file;
+    // Si ya era pequeña y el JPEG no ahorra nada, se sube tal cual.
+    if (k === 1 && blob.size >= file.size && /image\/(jpeg|png|webp)/.test(file.type)) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch { return file; }
 }
 
 /* ── interesados ────────────────────────────────────────────────── */

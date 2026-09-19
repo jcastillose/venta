@@ -37,7 +37,7 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo } from '/src/supabase.js';
+import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo } from '/src/supabase.js';
 
 aplicarTitulo('Producto');
 
@@ -79,7 +79,7 @@ function pintar() {
   cont.innerHTML = `<section class="detail">
     <div class="gallery">
       <div class="main">
-        ${foto ? `<img src="${foto}" alt="${esc(p.title)}">` : placeholderSVG(p.category)}
+        ${foto ? fotoHTML(foto, p.title, false) : placeholderSVG(p.category)}
         ${fotos.length > 1 ? `<div class="gal-nav">
           <span class="gal-count">${idx + 1} / ${fotos.length}</span>
           <button type="button" id="foto-prev" aria-label="Foto anterior"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>

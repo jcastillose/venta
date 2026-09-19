@@ -52,6 +52,14 @@ export const hora = (iso) => iso ? new Date(iso).toLocaleTimeString('es-CL', { h
 
 export const fotoUrl = (path) => path ? sb.storage.from('fotos').getPublicUrl(path).data.publicUrl : null;
 
+// Foto completa dentro de su cuadro: la imagen entera (object-fit: contain) sobre una
+// copia desenfocada de sí misma que rellena el fondo. Usar dentro de .thumb, .gallery .main o .photo.
+export const fotoHTML = (url, alt = '', lazy = true) => {
+  if (!url) return '';
+  const l = lazy ? ' loading="lazy" decoding="async"' : ' decoding="async"';
+  return `<img class="fondo" src="${url}" alt="" aria-hidden="true"${l}><img class="obj" src="${url}" alt="${esc(alt)}"${l}>`;
+};
+
 export const ESTADO = {
   disponible: { label: 'Disponible', color: 'var(--verde)' },
   reservado: { label: 'Reservado', color: 'var(--ambar)' },

@@ -1,5 +1,6 @@
 // Avisos por correo con Resend.
-// Lo llama un Database Webhook de Supabase cuando entra un interés o un pago.
+// Lo llama un Database Webhook de Supabase cuando entra un interés, un pago
+// o cuando una cuenta invitada del equipo se activa (UPDATE en members).
 //
 // Variables de entorno en Netlify:
 //   RESEND_API_KEY            re_...
@@ -18,17 +19,42 @@ export default async (req) => {
   }
 
   const payload = await req.json();           // { type, table, record, old_record }
-  const { table, type, record } = payload;
-  if (type !== 'INSERT') return ok();
+  const { table, type, record, old_record } = payload;
 
   const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
 
+  if (table === 'members' && type === 'UPDATE') return await avisoActivacion(sb, record, old_record);
+  if (type !== 'INSERT') return ok();
   if (table === 'interests') return await avisoInteres(sb, record);
   if (table === 'payments') return await avisoPago(sb, record);
   return ok();
 };
+
+/* ── Cuenta activada: la persona invitada abrió su enlace por primera vez ──── */
+async function avisoActivacion(sb, m, antes) {
+  // El webhook dispara en cada UPDATE de members (p. ej. last_seen); solo interesa invitado → activo.
+  if (!m || antes?.status !== 'invitado' || m.status !== 'activo') return ok();
+
+  const { data } = await sb.from('members').select('email')
+    .eq('status', 'activo').eq('role', 'admin').neq('id', m.id);
+  const admins = (data || []).map((a) => a.email);
+  if (!admins.length) return ok();
+
+  const ROLES = { admin: 'Administrador', editor: 'Editor' };
+  await enviar({
+    to: admins,
+    subject: `Cuenta activada: ${m.name || m.email}`,
+    html: plantilla({
+      titulo: 'Una persona del equipo activó su cuenta',
+      cuerpo: `<p><strong>${esc(m.name || '')}</strong> (${esc(m.email)}) abrió su invitación y ya puede entrar al panel.</p>
+        <p>Rol: ${esc(ROLES[m.role] || m.role)}.</p>`,
+      cta: { url: `${SITE}/admin.html#equipo`, label: 'Ver equipo' },
+    }),
+  });
+  return ok();
+}
 
 /* ── Interés nuevo: enlace privado al interesado + aviso al equipo ─────────── */
 async function avisoInteres(sb, i) {

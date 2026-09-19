@@ -64,7 +64,8 @@ h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:36px 28px;padding-top:32px}
 .card{display:grid;gap:12px;text-decoration:none;color:inherit}
 .thumb{position:relative;aspect-ratio:4/5;border-radius:10px;overflow:hidden;background:var(--wash);display:grid;place-items:center;isolation:isolate}
-.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.thumb img,.gallery .main img,.photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1}
+.thumb img.fondo,.gallery .main img.fondo,.photo img.fondo{object-fit:cover;filter:blur(20px) saturate(.85);transform:scale(1.2);opacity:.6;z-index:0;pointer-events:none}
 .thumb .ph{width:56px;height:56px;stroke:var(--faint);stroke-width:1.5;fill:none}
 .thumb .pill{position:absolute;bottom:12px;left:12px;z-index:2;white-space:nowrap;background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .thumb .pill.count{left:auto;right:12px;color:var(--muted)}
@@ -77,8 +78,7 @@ h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:48px;padding:20px 0 40px;align-items:start}
 .gallery{display:grid;gap:10px}
 .gallery .main{position:relative;aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--wash);display:grid;place-items:center}
-.gallery .main img{width:100%;height:100%;object-fit:cover}
-.gal-nav{position:absolute;bottom:12px;right:12px;display:flex;gap:6px;align-items:center}
+.gal-nav{position:absolute;bottom:12px;right:12px;z-index:2;display:flex;gap:6px;align-items:center}
 .gal-count{font-size:11px;font-weight:600;background:var(--bg);padding:6px 9px;border-radius:6px;color:var(--muted);font-variant-numeric:tabular-nums}
 .gal-nav button{width:36px;height:36px;border-radius:6px;border:0;background:var(--bg);cursor:pointer;display:grid;place-items:center;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .gal-nav button:hover{background:var(--surface)}
@@ -159,11 +159,10 @@ dialog .sheet p{margin:0;font-size:13.5px;line-height:1.5;color:var(--muted)}
 .dropzone:hover{background:var(--wash);border-color:var(--accent)}
 .photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 .photo{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--wash)}
-.photo img{width:100%;height:100%;object-fit:cover}
 .photo.cover{outline:2px solid var(--ink);outline-offset:2px}
-.photo .tools{position:absolute;bottom:8px;left:8px;right:8px;display:flex;gap:6px;justify-content:space-between}
+.photo .tools{position:absolute;z-index:2;bottom:8px;left:8px;right:8px;display:flex;gap:6px;justify-content:space-between}
 .photo .tools button{background:var(--bg);border:0;border-radius:6px;font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer}
-.photo .badge{position:absolute;top:10px;left:10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:4px 8px;border-radius:6px}
+.photo .badge{position:absolute;z-index:2;top:10px;left:10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:4px 8px;border-radius:6px}
 
 .center{min-height:60vh;display:grid;place-items:center;padding:48px 0}
 .empty{padding:48px 24px;text-align:center;color:var(--muted);border:1.5px dashed #C9C6BE;border-radius:12px;font-size:13.5px}

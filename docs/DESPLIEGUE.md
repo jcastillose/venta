@@ -176,7 +176,15 @@ Para que la función `cuentas` instale su dependencia, Netlify usa `site/package
 
 ## 7. Avisos por correo (opcional)
 
-Enlace privado al interesado y avisos al equipo cuando entra un interés o un pago: ver `docs/AVISOS-EMAIL.md` (Netlify Function + Resend + dos webhooks de Supabase).
+Enlace privado al interesado, avisos al equipo cuando entra un interés o un pago, y aviso a los administradores cuando una persona invitada activa su cuenta: ver `docs/AVISOS-EMAIL.md` (Netlify Function + Resend + tres webhooks de Supabase).
+
+## 8. Fotos
+
+No hay que preparar las fotos antes de subirlas. Al elegirlas en el editor, el navegador las redimensiona (lado mayor 1600 px, JPEG al 86 %, orientación corregida) y sube esa versión; una foto de celular de 4–6 MB queda en 200–400 KB. Si el navegador no puede leer el archivo (HEIC de iPhone en Chrome/Windows), el editor lo avisa: exportarla como JPG y volver a subirla. En iPhone, Ajustes → Cámara → Formatos → *Más compatible* evita el problema.
+
+En catálogo, ficha y editor la foto se ve **completa** dentro de su cuadro (sin recortes), sobre una copia desenfocada de sí misma que rellena el fondo. Las miniaturas pequeñas (tabla, chat, tira de la galería) siguen recortadas al cuadrado porque a ese tamaño solo sirven para reconocer el producto.
+
+Las fotos subidas antes de este cambio se reducen con **Optimizar fotos existentes**, en el editor de cada producto (debajo de la cuadrícula de fotos): descarga cada una, la redimensiona en el navegador, la sube de nuevo y borra la original. Orden y portada se conservan; las que ya pesaban poco se dejan igual. Para que la descarga funcione, el bucket `fotos` debe permitir CORS desde el sitio (Supabase lo hace por defecto en buckets públicos).
 
 ## Pendiente opcional
 

@@ -1,12 +1,13 @@
 # Avisos por correo — Netlify Function + Resend
 
-La función `site/netlify/functions/avisos.js` envía tres correos:
+La función `site/netlify/functions/avisos.js` envía cuatro correos:
 
 | Cuándo | A quién | Contenido |
 | --- | --- | --- |
 | Alguien marca interés | al interesado (si dejó correo) | su enlace privado `/c/<token>` |
 | Alguien marca interés | a todas las cuentas activas del equipo | quién, qué producto, su contacto |
 | Alguien avisa un pago | al equipo | monto, medio, referencia y link a Cobros |
+| Una persona invitada activa su cuenta | a los administradores activos (menos quien activó) | nombre, correo, rol y link a Equipo |
 
 Si la persona dejó un WhatsApp en vez de correo, no se le envía nada (el aviso al equipo lo dice) y el enlace se le pasa desde el hilo.
 
@@ -32,7 +33,7 @@ Vuelve a desplegar después de guardarlas (Deploys → *Trigger deploy → Clear
 
 ## 3. Webhooks en Supabase
 
-Supabase → **Database → Webhooks → Create a new hook**. Crea **dos**, idénticos salvo la tabla:
+Supabase → **Database → Webhooks → Create a new hook**. Crea **tres**, idénticos salvo la tabla y el evento:
 
 **Hook 1 — interés nuevo**
 
@@ -50,6 +51,10 @@ Supabase → **Database → Webhooks → Create a new hook**. Crea **dos**, idé
 
 Igual, pero Name `aviso-pago` y Table `public.payments`.
 
+**Hook 3 — cuenta activada**
+
+Igual, pero Name `aviso-cuenta`, Table `public.members` y Events: solo **Update**. La función solo envía correo cuando el estado pasa de `invitado` a `activo` (el resto de actualizaciones, como `last_seen`, se ignoran).
+
 El header secreto es lo que impide que cualquiera dispare correos llamando la URL.
 
 ## 4. Probar
@@ -57,6 +62,7 @@ El header secreto es lo que impide que cualquiera dispare correos llamando la UR
 1. Entra al catálogo, abre un producto y marca interés con un correo tuyo.
 2. Deberías recibir el correo con el enlace, y otro a tu cuenta del equipo.
 3. En **Interesados** reserva; desde el enlace del interesado avisa un pago; llega el correo de "Pago por confirmar".
+4. En **Equipo** invita a un correo tuyo y abre el enlace: a los administradores les llega "Cuenta activada".
 
 Si no llega nada:
 
