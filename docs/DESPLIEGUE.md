@@ -120,7 +120,7 @@ El administrador también puede **editar** (nombre, correo, rol, contraseña), *
 
 **Netlify → Site configuration**
 - Environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` sin espacios ni comillas. Tras cambiarlas: Deploys → *Clear cache and deploy site*.
-- Functions: `cuentas`, `avisos` y `recuperar` listadas. Si no aparecen, revisar `netlify.toml` y `netlify/functions/package.json`.
+- Functions: `cuentas`, `avisos`, `recuperar` y `visita` listadas. Si no aparecen, revisar `netlify.toml` y `netlify/functions/package.json`.
 - Domain: si algún día se usa dominio propio, agregarlo también en Redirect URLs de Supabase y en `SITE_URL` de `supabase.js`.
 
 **GitHub**
@@ -229,3 +229,15 @@ Requiere `supabase/012-medidas-borrar-hilo.sql` (incluido en `000-base-completa.
 ## 13. Nombre del remitente de los correos
 
 El nombre visible («venta.hogar») vive en la variable `MAIL_FROM` de Netlify, con el formato `Nombre visible <correo>`. Para cambiarlo: Site configuration → Environment variables → `MAIL_FROM` → Edit → p. ej. `Oferta de Muebles y Electrodomésticos <admin@contact.agencements.net>` → Save → Deploys → *Clear cache and deploy site*. Si configuraste el SMTP de Supabase con Resend, cambia también allí *Sender name*.
+
+## 14. Visitas y estadísticas (013)
+
+Pestaña **Visitas** del panel, visible solo para administradores.
+
+**Qué se registra.** Cada carga del catálogo, cada ficha de producto abierta, cada clic en «Me interesa» confirmado y cada filtro de categoría. El navegador envía un aviso mínimo (`src/visitas.js`, `sendBeacon`) a la función `netlify/functions/visita.js`, que agrega en el servidor: IP completa, país, región, ciudad y coordenadas aproximadas (cabeceras geográficas de Netlify, sin servicio externo), dispositivo (móvil / tablet / escritorio), navegador y si es bot. Se guarda indefinidamente en `public.visits`. Las visitas del equipo no se cuentan: `admin.html` deja la marca `vh.equipo` en el navegador al entrar y la quita al salir.
+
+**Qué se ve.** Periodo (7/30/90 días, todo, o fechas a elegir) y casilla para incluir bots. Totales (visitas, visitantes únicos por sesión, países, bots), gráfico de visitas por día con línea de únicos, mapa de visitantes (OpenStreetMap, círculos por ubicación), productos más vistos con tasa vista → interés, países, ciudades, dispositivos, origen (sitios externos), categorías filtradas, búsquedas, y tabla de visitas recientes (IP, lugar, página, dispositivo, origen). **Exportar CSV** descarga todo el periodo (separador `;`, listo para Excel en español).
+
+**Seguridad.** La tabla no acepta lecturas ni escrituras con la clave pública: inserta la función con `SUPABASE_SERVICE_ROLE_KEY` (ya configurada) y leen solo cuentas activas con rol administrador (RLS + `visits_summary` comprueban `is_admin()`).
+
+**Notas.** La geolocalización solo funciona en el sitio publicado (en local Netlify no envía esas cabeceras, la fila queda sin lugar). El evento `busqueda` está previsto pero el catálogo aún no tiene buscador; cuando se agregue, basta llamar `registrar('busqueda', { query })`. Requiere `supabase/013-visitas.sql` (incluido en `000-base-completa.sql`).

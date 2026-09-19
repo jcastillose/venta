@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=12">
+<link rel="stylesheet" href="/src/app.css?v=13">
 </head>
 <body>
 <nav class="nav">
@@ -39,6 +39,7 @@
 
 <script type="module">
 import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo } from '/src/supabase.js';
+import { registrar } from '/src/visitas.js';
 
 aplicarTitulo('Producto');
 
@@ -62,7 +63,9 @@ async function cargar() {
   prod = p; fotos = f || []; metodos = (m || []).map((x) => METODOS[x.method] || x.method);
   document.title = p.title + ' — ' + (window.__tituloSitio || 'Oferta de Muebles y Electrodomésticos');
   pintar();
+  if (!vistaRegistrada) { vistaRegistrada = true; registrar('producto', { product_id: id }); }
 }
+let vistaRegistrada = false;
 
 function metodosTexto() {
   if (!metodos.length) return 'los medios de pago del equipo';
@@ -144,7 +147,7 @@ function pintar() {
   } else {
     cta.innerHTML = `<p class="lead">${n === 0 ? 'Sin interesados aún' : n === 1 ? '1 persona interesada' : n + ' personas interesadas'}. ${ajustes.ofertas_habilitadas
         ? 'Al mostrar tu interés se abre una conversación privada con quien vende para coordinar la reserva.'
-        : 'El precio es fijo: marcar interés equivale a pedir la reserva y abre una conversación privada con quien vende.'}</p>
+        : 'Al marcar interés se abre una conversación privada con quien vende.'}</p>
       <p class="lead" style="display:flex;align-items:center;gap:8px"><span class="icon" style="display:inline-grid;width:15px;height:15px;flex:none;color:var(--accent)">${ICON.card}</span><span>Al reservar pagas con ${esc(metodosTexto())}.</span></p>
       <div><button class="btn btn-primary" id="btn-interes" style="padding:12px 20px;font-size:14px">${ICON.heart}${ajustes.ofertas_habilitadas ? 'Me interesa / ofertar' : 'Me interesa'}</button></div>`;
     document.getElementById('btn-interes').onclick = abrir;
@@ -185,6 +188,7 @@ form.onsubmit = async (e) => {
   if (error) return fail(error);
 
   const token = data;
+  registrar('interes', { product_id: prod.id });
   guardarToken(token, prod.title);
   const all = JSON.parse(localStorage.getItem('vh.tokens'));
   all[0].productId = prod.id;

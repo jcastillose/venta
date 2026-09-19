@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=12">
+<link rel="stylesheet" href="/src/app.css?v=13">
 </head>
 <body>
 <nav class="nav">
@@ -117,6 +117,7 @@ async function init() {
   }
   if (data.status !== 'activo') return suspendida(data);
   me = data;
+  localStorage.setItem('vh.equipo', '1');   // las visitas del equipo al sitio público no se cuentan
   sb.from('members').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {});
   navegar();
   try {
@@ -237,6 +238,7 @@ const salir = async () => {
   // Respaldo: borrar cualquier sesión que haya quedado guardada.
   Object.keys(localStorage).filter((k) => k.startsWith('sb-') && k.endsWith('-auth-token')).forEach((k) => localStorage.removeItem(k));
   me = null;
+  localStorage.removeItem('vh.equipo');
   location.replace('/admin.html');
 };
 
@@ -266,7 +268,8 @@ function suspendida(m) {
 }
 
 function navegar() {
-  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo'], ['ajustes', 'Ajustes'], ['cuenta', 'Mi cuenta']];
+  const tabs = [['productos', 'Productos'], ['interesados', 'Interesados'], ['cobros', 'Cobros'], ['equipo', 'Equipo'],
+    ...(me.role === 'admin' ? [['visitas', 'Visitas']] : []), ['ajustes', 'Ajustes'], ['cuenta', 'Mi cuenta']];
   const nav = document.getElementById('nav-tabs');
   nav.classList.remove('hide');
   nav.innerHTML = tabs.map(([k, l]) => {
@@ -324,7 +327,7 @@ const nInteresados = (id) => intereses.filter((i) => i.product_id === id).length
 /* ── router ─────────────────────────────────────────────────────── */
 function render() {
   ({ productos: vProductos, editor: vEditor, interesados: vInteresados,
-     chat: vChat, cobros: vCobros, equipo: vEquipo, cuenta: vCuenta, ajustes: vAjustes }[vista] || vProductos)();
+     chat: vChat, cobros: vCobros, equipo: vEquipo, cuenta: vCuenta, ajustes: vAjustes, visitas: vVisitas }[vista] || vProductos)();
 }
 
 /* ── ajustes ─────────────────────────────────────────────────────── */
@@ -1017,6 +1020,202 @@ function vCobros() {
     if (error) return fail(error);
     recargar();
   });
+}
+
+
+/* ── visitas (solo administradores) ─────────────────────────────── */
+const VIS_RANGOS = { '7d': 'Últimos 7 días', '30d': 'Últimos 30 días', '90d': 'Últimos 90 días', 'todo': 'Todo el registro', 'custom': 'Fechas a elegir' };
+const visEstado = { rango: '30d', desde: '', hasta: '', bots: false };
+const nombrePais = (() => { let dn; try { dn = new Intl.DisplayNames(['es'], { type: 'region' }); } catch { dn = null; }
+  return (c) => { if (!c) return '—'; try { return dn?.of(c) || c; } catch { return c; } }; })();
+const EVENTO = { catalogo: 'Catálogo', producto: 'Ficha de producto', interes: 'Me interesa', busqueda: 'Búsqueda', categoria: 'Filtro de categoría' };
+const n0 = (n) => Number(n || 0).toLocaleString('es-CL');
+
+function visRango() {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const fin = new Date(hoy); fin.setDate(fin.getDate() + 1);
+  const dias = { '7d': 7, '30d': 30, '90d': 90 }[visEstado.rango];
+  if (visEstado.rango === 'todo') return { desde: new Date('2024-01-01'), hasta: fin };
+  if (visEstado.rango === 'custom') {
+    const d = visEstado.desde ? new Date(visEstado.desde + 'T00:00:00') : new Date(hoy.getTime() - 29 * 864e5);
+    const h = visEstado.hasta ? new Date(visEstado.hasta + 'T00:00:00') : hoy;
+    h.setDate(h.getDate() + 1);
+    return { desde: d, hasta: h };
+  }
+  return { desde: new Date(hoy.getTime() - (dias - 1) * 864e5), hasta: fin };
+}
+
+function cargarLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (!document.getElementById('leaflet-css')) {
+    const l = document.createElement('link'); l.id = 'leaflet-css'; l.rel = 'stylesheet';
+    l.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(l);
+  }
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+}
+
+async function vVisitas() {
+  if (me.role !== 'admin') return vProductos();
+  const { desde, hasta } = visRango();
+  view.innerHTML = `
+    <section class="section-head">
+      <div class="stack">
+        <span class="kicker">Solo administradores</span>
+        <h2>Visitas al sitio</h2>
+        <p class="lead">Quién entra, desde dónde y qué productos mira. La ubicación es aproximada (nivel ciudad) y sale de la red de Netlify; las visitas del equipo no se cuentan.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <label class="field">Periodo<select id="vis-rango">${Object.entries(VIS_RANGOS).map(([k, l]) => `<option value="${k}" ${visEstado.rango === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field ${visEstado.rango === 'custom' ? '' : 'hide'}" id="vis-desde-w">Desde<input type="date" id="vis-desde" value="${visEstado.desde}"></label>
+        <label class="field ${visEstado.rango === 'custom' ? '' : 'hide'}" id="vis-hasta-w">Hasta<input type="date" id="vis-hasta" value="${visEstado.hasta}"></label>
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);min-height:42px;cursor:pointer"><input type="checkbox" id="vis-bots" ${visEstado.bots ? 'checked' : ''}> Incluir bots</label>
+        <button class="btn btn-secondary" id="vis-csv">Exportar CSV</button>
+      </div>
+    </section>
+    <div id="vis-cuerpo"><p class="spinner">Cargando visitas…</p></div>`;
+
+  document.getElementById('vis-rango').onchange = (e) => { visEstado.rango = e.target.value; vVisitas(); };
+  document.getElementById('vis-desde').onchange = (e) => { visEstado.desde = e.target.value; vVisitas(); };
+  document.getElementById('vis-hasta').onchange = (e) => { visEstado.hasta = e.target.value; vVisitas(); };
+  document.getElementById('vis-bots').onchange = (e) => { visEstado.bots = e.target.checked; vVisitas(); };
+  document.getElementById('vis-csv').onclick = () => exportarVisitasCSV(desde, hasta);
+
+  const [{ data: r, error }, det] = await Promise.all([
+    sb.rpc('visits_summary', { p_from: desde.toISOString(), p_to: hasta.toISOString(), p_bots: visEstado.bots }),
+    (() => { let q = sb.from('visits').select('*').gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).limit(400);
+      if (!visEstado.bots) q = q.eq('bot', false); return q; })(),
+  ]);
+  const cuerpo = document.getElementById('vis-cuerpo');
+  if (!cuerpo) return;
+  if (error) { cuerpo.innerHTML = `<div class="empty">${/visits_summary|does not exist/.test(error.message) ? 'Falta ejecutar <code>013-visitas.sql</code> en Supabase.' : esc(error.message)}</div>`; return; }
+  const filas = det.data || [];
+  if (!r.total && !filas.length) { cuerpo.innerHTML = '<div class="empty">Sin visitas en este periodo. Las visitas se registran desde que el sitio se despliega con <code>visita.js</code>.</div>'; return; }
+
+  const tituloDe = (id) => prod(id)?.title || '';
+  const barra = (lista, fmtK = (k) => k) => {
+    const max = Math.max(1, ...lista.map((x) => x.n));
+    return lista.length ? lista.map((x) => `<div class="vis-fila"><span class="vis-k" title="${esc(fmtK(x.k, x))}">${esc(fmtK(x.k, x))}</span><span class="vis-n">${n0(x.n)}</span><span class="vis-bar"><i style="width:${Math.round(x.n / max * 100)}%"></i></span></div>`).join('')
+      : '<p class="lead" style="font-size:13px">Sin datos.</p>';
+  };
+  const fmtF = new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  cuerpo.innerHTML = `
+    <div class="stats">
+      <div class="stat"><span class="kicker">Visitas</span><b>${n0(r.total)}</b><span class="lead" style="font-size:12.5px">${VIS_RANGOS[visEstado.rango].toLowerCase()}</span></div>
+      <div class="stat"><span class="kicker">Visitantes únicos</span><b>${n0(r.unicos)}</b><span class="lead" style="font-size:12.5px">por sesión de navegación</span></div>
+      <div class="stat"><span class="kicker">Países</span><b>${n0(r.n_paises)}</b><span class="lead" style="font-size:12.5px">con ubicación</span></div>
+      <div class="stat"><span class="kicker">Bots</span><b>${n0(r.bots)}</b><span class="lead" style="font-size:12.5px">${visEstado.bots ? 'incluidos arriba' : 'excluidos del conteo'}</span></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline"><h3 style="margin:0">Visitas por día</h3><span class="lead" style="font-size:12.5px">barra: visitas · línea: visitantes únicos</span></div>
+      ${graficoDias(r.por_dia, desde, hasta)}
+    </div>
+
+    <div class="vis-grid">
+      <div class="panel" style="grid-column:1/-1">
+        <h3 style="margin:0">Mapa de visitantes</h3>
+        <div id="vis-mapa" style="height:380px;border-radius:10px;overflow:hidden;background:var(--wash)"></div>
+        <p class="lead" style="font-size:12px">Cada círculo agrupa visitas con la misma ubicación aproximada; el tamaño es proporcional. ${r.puntos.length ? '' : 'Ninguna visita del periodo trae coordenadas.'}</p>
+      </div>
+
+      <div class="panel" style="grid-column:1/-1">
+        <h3 style="margin:0">Productos más vistos</h3>
+        ${r.productos.length ? `<div class="tablewrap" style="border:0;border-radius:0"><table>
+          <thead><tr><th>Producto</th><th class="right">Vistas</th><th class="right">Me interesa</th><th class="right">Tasa vista → interés</th><th></th></tr></thead>
+          <tbody>${r.productos.map((p) => `<tr>
+            <td><div class="stack"><strong>${esc(p.title)}</strong><span class="sub">${ESTADO[p.status]?.label || p.status}</span></div></td>
+            <td class="right">${n0(p.vistas)}</td><td class="right">${n0(p.intereses)}</td>
+            <td class="right">${p.vistas ? (p.intereses / p.vistas * 100).toFixed(1).replace('.', ',') + ' %' : '—'}</td>
+            <td class="right"><a href="/p/${p.id}" target="_blank" rel="noopener" style="font-size:12.5px">Ver ficha ↗</a></td></tr>`).join('')}</tbody></table></div>`
+          : '<p class="lead" style="font-size:13px">Todavía nadie abrió una ficha en este periodo.</p>'}
+      </div>
+
+      <div class="panel"><h3 style="margin:0">Países</h3>${barra(r.paises, nombrePais)}</div>
+      <div class="panel"><h3 style="margin:0">Ciudades</h3>${barra(r.ciudades, (k, x) => x.pais ? `${k}, ${x.pais}` : k)}</div>
+      <div class="panel"><h3 style="margin:0">Dispositivos</h3>${barra(r.dispositivos)}</div>
+      <div class="panel"><h3 style="margin:0">Origen de las visitas</h3>${barra(r.referencias)}<p class="lead" style="font-size:12px">Solo sitios externos; los accesos directos o desde el propio catálogo no aparecen.</p></div>
+      <div class="panel"><h3 style="margin:0">Categorías filtradas</h3>${barra(r.categorias)}</div>
+      <div class="panel"><h3 style="margin:0">Búsquedas</h3>${barra(r.busquedas)}</div>
+    </div>
+
+    <section class="section-head" style="padding-top:36px"><div class="stack"><h3 style="margin:0">Visitas recientes</h3><p class="lead">Últimas ${n0(filas.length)} del periodo. La exportación CSV incluye todas.</p></div></section>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Dirección IP</th><th>Lugar</th><th>Página</th><th>Dispositivo</th><th>Origen</th></tr></thead>
+      <tbody>${filas.map((f) => `<tr${f.bot ? ' style="opacity:.55"' : ''}>
+        <td style="white-space:nowrap">${fmtF.format(new Date(f.created_at))}</td>
+        <td style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;white-space:nowrap">${esc(f.ip || '—')}</td>
+        <td>${esc([f.city, f.region, nombrePais(f.country)].filter((x) => x && x !== '—').join(', ') || '—')}</td>
+        <td><div class="stack"><span>${EVENTO[f.event] || f.event}${f.bot ? ' · bot' : ''}</span><span class="sub">${esc(f.product_id ? tituloDe(f.product_id) : f.category || f.query || f.path || '')}</span></div></td>
+        <td>${esc(f.device || '—')}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${esc(host(f.referrer))}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+
+  pintarMapa(r.puntos);
+}
+
+function host(ref) { if (!ref) return 'directa'; try { return new URL(ref).hostname.replace(/^www\./, ''); } catch { return ref.slice(0, 40); } }
+
+function graficoDias(serie, desde, hasta) {
+  const porDia = Object.fromEntries((serie || []).map((d) => [d.dia, d]));
+  const dias = [];
+  for (let t = new Date(desde); t < hasta; t.setDate(t.getDate() + 1)) {
+    const k = t.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+    dias.push({ k, n: porDia[k]?.n || 0, u: porDia[k]?.u || 0 });
+  }
+  if (dias.length > 366) return '<p class="lead" style="font-size:13px">Periodo demasiado largo para el gráfico; elige menos de un año.</p>';
+  const W = 960, H = 160, pad = 26, bw = (W - pad) / dias.length;
+  const max = Math.max(1, ...dias.map((d) => d.n));
+  const y = (v) => H - 20 - (v / max) * (H - 36);
+  const fmtD = (k) => new Date(k + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+  const linea = dias.map((d, i) => `${i ? 'L' : 'M'}${(pad + i * bw + bw / 2).toFixed(1)},${y(d.u).toFixed(1)}`).join(' ');
+  const paso = Math.ceil(dias.length / 8);
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Visitas por día">
+    <text x="0" y="${y(max) + 4}" font-size="11" fill="var(--faint)">${n0(max)}</text>
+    <text x="0" y="${H - 20}" font-size="11" fill="var(--faint)">0</text>
+    <line x1="${pad}" x2="${W}" y1="${H - 20}" y2="${H - 20}" stroke="var(--line)"/>
+    ${dias.map((d, i) => `<rect x="${(pad + i * bw + bw * 0.15).toFixed(1)}" y="${y(d.n).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - 20 - y(d.n)).toFixed(1)}" rx="2" fill="var(--accent)" opacity=".85"><title>${fmtD(d.k)}: ${n0(d.n)} visitas · ${n0(d.u)} únicos</title></rect>`).join('')}
+    <path d="${linea}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/>
+    ${dias.map((d, i) => i % paso === 0 || i === dias.length - 1 ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${fmtD(d.k)}</text>` : '').join('')}
+  </svg>`;
+}
+
+async function pintarMapa(puntos) {
+  const el = document.getElementById('vis-mapa');
+  if (!el) return;
+  if (!puntos.length) { el.style.display = 'none'; return; }
+  try { await cargarLeaflet(); } catch { el.innerHTML = '<p class="lead" style="padding:16px">No se pudo cargar el mapa.</p>'; return; }
+  if (!document.getElementById('vis-mapa')) return;
+  const mapa = L.map(el, { scrollWheelZoom: false, attributionControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapa);
+  const max = Math.max(1, ...puntos.map((p) => p.n));
+  const grupo = L.featureGroup(puntos.map((p) => L.circleMarker([p.lat, p.lon], {
+    radius: 6 + Math.sqrt(p.n / max) * 22, color: '#0F6E63', weight: 1.5, fillColor: '#0F6E63', fillOpacity: .35,
+  }).bindTooltip(`<strong>${esc(p.city || 'Ubicación aproximada')}</strong>${p.pais ? ', ' + esc(nombrePais(p.pais)) : ''}<br>${n0(p.n)} ${p.n === 1 ? 'visita' : 'visitas'}`))).addTo(mapa);
+  mapa.fitBounds(grupo.getBounds().pad(0.25), { maxZoom: 11 });
+}
+
+async function exportarVisitasCSV(desde, hasta) {
+  toast('Preparando CSV…');
+  const filas = [];
+  for (let off = 0; ; off += 1000) {
+    let q = sb.from('visits').select('*').gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).range(off, off + 999);
+    if (!visEstado.bots) q = q.eq('bot', false);
+    const { data, error } = await q;
+    if (error) return fail(error);
+    filas.push(...(data || []));
+    if (!data || data.length < 1000 || filas.length >= 50000) break;
+  }
+  const cols = ['created_at', 'event', 'path', 'product_id', 'producto', 'category', 'query', 'referrer', 'session_id', 'ip', 'country', 'region', 'city', 'lat', 'lon', 'device', 'agent', 'bot'];
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const csv = cols.join(';') + '\n' + filas.map((f) => cols.map((c) => q(c === 'producto' ? prod(f.product_id)?.title || '' : f[c])).join(';')).join('\n');
+  const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url;
+  a.download = `visitas-${desde.toISOString().slice(0, 10)}-a-${new Date(hasta - 1).toISOString().slice(0, 10)}.csv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* ── equipo ─────────────────────────────────────────────────────── */

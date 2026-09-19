@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=12">
+<link rel="stylesheet" href="/src/app.css?v=13">
 </head>
 <body>
 <nav class="nav">
@@ -32,6 +32,7 @@
 
 <script type="module">
 import { sb, clp, esc, cargarCategorias, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, aplicarTitulo } from '/src/supabase.js';
+import { registrar } from '/src/visitas.js';
 
 aplicarTitulo('');
 
@@ -49,7 +50,7 @@ function pintarFiltros() {
     .map((c) => `<button type="button" role="tab" aria-selected="${c === cat}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')
     + `<label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding-left:22px;border-left:1px solid var(--line);padding-bottom:6px;color:var(--muted)">
         <input type="checkbox" id="chk-vendidos" ${verVendidos ? 'checked' : ''}> Mostrar vendidos</label>`;
-  filtros.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { cat = b.dataset.cat; pintarFiltros(); pintar(); });
+  filtros.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { cat = b.dataset.cat; pintarFiltros(); pintar(); if (cat !== 'Todo') registrar('categoria', { category: cat }); });
   filtros.querySelector('#chk-vendidos').onchange = (e) => { verVendidos = e.target.checked; pintar(); };
 }
 
@@ -106,6 +107,7 @@ async function cargar() {
 }
 
 cargar();
+registrar('catalogo');
 
 sb.channel('catalogo')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, cargar)
