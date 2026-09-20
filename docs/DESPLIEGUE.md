@@ -241,3 +241,13 @@ Pestaña **Visitas** del panel, visible solo para administradores.
 **Seguridad.** La tabla no acepta lecturas ni escrituras con la clave pública: inserta la función con `SUPABASE_SERVICE_ROLE_KEY` (ya configurada) y leen solo cuentas activas con rol administrador (RLS + `visits_summary` comprueban `is_admin()`).
 
 **Notas.** La geolocalización solo funciona en el sitio publicado (en local Netlify no envía esas cabeceras, la fila queda sin lugar). El evento `busqueda` está previsto pero el catálogo aún no tiene buscador; cuando se agregue, basta llamar `registrar('busqueda', { query })`. Requiere `supabase/013-visitas.sql` (incluido en `000-base-completa.sql`).
+
+## 15. Eliminar productos (015)
+
+Correr `supabase/015-eliminar-producto.sql` (o `000-base-completa.sql`, que ya lo incluye). Crea la RPC `delete_product`: borra el producto con sus fotos, interesados, mensajes, ofertas y pagos; los enlaces privados de esos hilos dejan de funcionar. Se bloquea si algún interesado tiene un pago confirmado (en ese caso: marcar Vendido u Oculto). En el panel: botón de papelera en la tabla de Productos y «Eliminar producto» al pie del editor, ambos con confirmación.
+
+## 16. Logo y previsualización al compartir
+
+- `src/logo.png` — logo de la barra (todas las páginas); al hacer clic vuelve al catálogo. `src/favicon.png` — icono de pestaña. `src/og.png` — imagen 1200×630 que muestran WhatsApp, Facebook, X, etc. al compartir un enlace (`og:image` en el `<head>` de cada página, con URL absoluta `https://mobventa.netlify.app/src/og.png`).
+- Para reemplazar el logo, sustituir esos tres archivos por otros con el mismo nombre y desplegar. WhatsApp y Facebook cachean la previsualización: para forzar la actualización, usar https://developers.facebook.com/tools/debug/ con la URL del sitio.
+- El nombre del sitio (Ajustes → Nombre del sitio) sigue usándose en la pestaña del navegador, en los correos y como texto alternativo del logo.

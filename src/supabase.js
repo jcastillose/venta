@@ -28,18 +28,18 @@ export async function cargarCategorias() {
 }
 
 // Título del sitio: se edita en Administración → Ajustes (site_settings.titulo_sitio).
-export const TITULO_BASE = 'Oferta de Muebles y Electrodomésticos';
+export const TITULO_BASE = 'MobVenta';
 export async function tituloSitio() {
   const { data } = await sb.from('site_settings').select('value').eq('key', 'titulo_sitio').maybeSingle();
   const v = data?.value;
   return typeof v === 'string' && v.trim() ? v.trim() : TITULO_BASE;
 }
-// Pinta el título en la marca de la barra y en la pestaña; `sufijo` es el nombre de la página.
+// Pinta el título en la pestaña y como tooltip del logo (la marca de la barra es la imagen /src/logo.png); `sufijo` es el nombre de la página.
 export async function aplicarTitulo(sufijo) {
   const t = await tituloSitio();
   window.__tituloSitio = t;
-  document.querySelectorAll('.nav .brand').forEach((el) => { el.textContent = t; });
-  if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE)) {
+  document.querySelectorAll('.nav .brand').forEach((el) => { el.title = t; el.setAttribute('aria-label', `${t}, ir al catálogo`); });
+  if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE) || document.title.startsWith(TITULO_BASE)) {
     document.title = sufijo ? `${sufijo} — ${t}` : t;
   }
   return t;

@@ -69,7 +69,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 const plantilla = ({ titulo, cuerpo, pie }) => `
 <div style="margin:0;padding:32px 16px;background:#FAFAF8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#141414">
   <div style="max-width:520px;margin:0 auto;background:#FFFFFF;border:1px solid #E4E2DD;border-radius:12px;padding:28px">
-    <p style="margin:0 0 18px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#6B6964">Oferta de Muebles y Electrodomésticos</p>
+    <img src="https://mobventa.netlify.app/src/logo.png" alt="MobVenta" width="150" style="display:block;width:150px;height:auto;margin:0 0 18px">
     <h1 style="margin:0 0 14px;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2">${titulo}</h1>
     <div style="font-size:14.5px;line-height:1.6;color:#2B2A27">${cuerpo}</div>
     ${pie ? `<p style="margin:22px 0 0;padding-top:18px;border-top:1px solid #EEECE7;font-size:12.5px;color:#6B6964">${pie}</p>` : ''}

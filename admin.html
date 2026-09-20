@@ -4,15 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Administración — Oferta de Muebles y Electrodomésticos</title>
+<title>Administración — MobVenta</title>
+<link rel="icon" type="image/png" href="/src/favicon.png">
+<link rel="apple-touch-icon" href="/src/favicon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MobVenta">
+<meta property="og:title" content="MobVenta">
+<meta property="og:description" content="Venta de muebles, electrodomésticos y electrónica por cambio de casa. Precio publicado y trato directo con quien vende.">
+<meta property="og:image" content="https://mobventa.netlify.app/src/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://mobventa.netlify.app/src/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=13">
+<link rel="stylesheet" href="/src/app.css?v=16">
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/">Oferta de Muebles y Electrodomésticos</a>
+  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/src/logo.png" alt="MobVenta — Venta de muebles por cambio de casa"></a>
   <a href="/">Catálogo</a>
   <span id="nav-tabs" class="hide" style="display:flex;gap:28px"></span>
   <span id="nav-me" class="hide" style="margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted)"></span>
@@ -502,12 +513,13 @@ function vProductos() {
             <span class="dot" style="background:${p.accepts_offers === false ? 'var(--gris)' : 'var(--verde)'}"></span>${p.accepts_offers === false ? 'Precio fijo' : 'Acepta ofertas'}</button></td>
           <td class="sub">${esc(nombreDe(p.created_by))}</td>
           <td><button class="btn btn-ghost" style="color:var(--accent)" data-int="${p.id}">${nInteresados(p.id) || 'Sin'} interesados</button></td>
-          <td class="right"><button class="btn btn-secondary" data-edit="${p.id}">${ICON.edit}Editar</button></td>
+          <td class="right"><div style="display:inline-flex;gap:8px"><button class="btn btn-secondary" data-edit="${p.id}">${ICON.edit}Editar</button><button class="btn btn-secondary btn-danger" data-del-prod="${p.id}" aria-label="Eliminar producto" title="Eliminar producto" style="width:32px;height:32px;padding:0;display:grid;place-items:center">${ICON.trash}</button></div></td>
         </tr>`; }).join('')}</tbody>
     </table>${productos.length ? '' : '<div class="empty" style="border:0">Aún no hay productos publicados.</div>'}</div>`;
 
   document.getElementById('nuevo').onclick = () => ir('editor', { id: null });
   view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => ir('editor', { id: b.dataset.edit }));
+  view.querySelectorAll('[data-del-prod]').forEach((b) => b.onclick = () => eliminarProducto(b.dataset.delProd, () => ir('productos')));
   view.querySelectorAll('[data-int]').forEach((b) => b.onclick = () => ir('interesados', { productId: b.dataset.int }));
   view.querySelectorAll('[data-offers]').forEach((b) => b.onclick = async () => {
     const on = b.dataset.to === 'true';
@@ -595,12 +607,14 @@ function vEditor() {
         <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:8px">
           <button class="btn btn-primary" style="padding:12px 20px;font-size:14px">${ctx.id ? 'Guardar cambios' : 'Publicar'}</button>
           <button type="button" class="btn btn-secondary" style="padding:12px 20px;font-size:14px" id="cancelar">Cancelar</button>
+          ${ctx.id ? `<button type="button" class="btn btn-ghost btn-danger" style="padding:12px 16px;font-size:13.5px;margin-left:auto" id="eliminar-prod">${ICON.trash}Eliminar producto</button>` : ''}
         </div>
       </form>
     </section>`;
 
   document.getElementById('volver').onclick = () => ir('productos');
   document.getElementById('cancelar').onclick = () => ir('productos');
+  document.getElementById('eliminar-prod')?.addEventListener('click', () => eliminarProducto(ctx.id, () => ir('productos')));
 
   const form = document.getElementById('form-prod');
   const hint = document.getElementById('precio-hint');
@@ -796,6 +810,19 @@ async function eliminarInteres(id, despues) {
 }
 
 const num = (v) => (v === '' || v == null || isNaN(+v)) ? null : +v;
+
+// Elimina el producto con sus fotos, interesados, mensajes, ofertas y pagos. Bloqueado si hay un pago confirmado.
+async function eliminarProducto(id, despues) {
+  const p = prod(id); if (!p) return;
+  const n = nInteresados(id);
+  const hilos = n ? `\n\nSe borran también ${n === 1 ? 'su conversación con 1 interesado' : `sus conversaciones con ${n} interesados`}; sus enlaces privados dejan de funcionar.` : '';
+  if (!confirm(`¿Eliminar «${p.title}» definitivamente?\n\nSe borran el producto y sus ${fotos(id).length} fotos. No se puede deshacer.${hilos}\n\nSi solo quieres que no se vea, usa Visibilidad → Oculto.`)) return;
+  const { data, error } = await sb.rpc('delete_product', { p_product: id });
+  if (error) return fail(/delete_product/.test(error.message) ? new Error('Falta ejecutar supabase/015-eliminar-producto.sql en Supabase.') : error);
+  if (data?.length) await sb.storage.from('fotos').remove(data).catch(console.warn);
+  await cargar();
+  toast('Producto eliminado'); despues();
+}
 
 /* ── chat del equipo ────────────────────────────────────────────── */
 const esCorreo = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());

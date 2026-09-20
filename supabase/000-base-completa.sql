@@ -826,6 +826,30 @@ end $$;
 revoke all on function public.visits_summary(timestamptz, timestamptz, boolean) from public;
 grant execute on function public.visits_summary(timestamptz, timestamptz, boolean) to authenticated;
 
+-- ── 6g. Eliminar producto (015) ──────────────────────────────────────────────
+-- Borra el producto y, en cascada, fotos, interesados, mensajes, ofertas y pagos.
+-- Bloqueado si hay un pago confirmado. Devuelve las rutas de Storage a borrar.
+create or replace function public.delete_product(p_product uuid)
+returns text[] language plpgsql security definer set search_path = public as $$
+declare v_paths text[];
+begin
+  if not public.is_member() then raise exception 'Solo el equipo puede eliminar productos'; end if;
+  if not exists (select 1 from public.products where id = p_product) then return '{}'; end if;
+  if exists (
+    select 1 from public.payments y join public.interests i on i.id = y.interest_id
+    where i.product_id = p_product and y.status = 'pagado'
+  ) then
+    raise exception 'Este producto tiene un pago confirmado: no se puede eliminar. Márcalo como vendido u ocúltalo.';
+  end if;
+  select coalesce(array_agg(storage_path), '{}') into v_paths from public.product_photos where product_id = p_product;
+  delete from public.products where id = p_product;
+  return v_paths;
+end $$;
+revoke all on function public.delete_product(uuid) from public;
+grant execute on function public.delete_product(uuid) to authenticated;
+update public.site_settings set value = to_jsonb('MobVenta'::text)
+  where key = 'titulo_sitio' and value = to_jsonb('Oferta de Muebles y Electrodomésticos'::text);
+
 -- ── 7. Saneamiento, semillas, integridad y realtime ──────────────────────────
 -- Equipo: cada cuenta lee su fila; las activas leen a todo el equipo. Nadie más.
 drop policy if exists "equipo: nombre público" on public.members;
@@ -916,6 +940,7 @@ with esperado(tipo, nombre, usado_por) as (values
   ('rpc',     'delete_thread_by_token', 'c.html (012)'),
   ('tabla',   'visits',           'visita.js / admin.html (013)'),
   ('rpc',     'visits_summary',   'admin.html (013)'),
+  ('rpc',     'delete_product',   'admin.html (015)'),
   ('rpc',     'setting_on',       'catalog (003)'),
   ('rpc',     'is_member',        'RLS'),
   ('rpc',     'is_admin',         'RLS'),
