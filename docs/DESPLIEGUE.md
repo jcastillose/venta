@@ -251,3 +251,11 @@ Correr `supabase/015-eliminar-producto.sql` (o `000-base-completa.sql`, que ya l
 - `src/logo.png` — logo de la barra (todas las páginas); al hacer clic vuelve al catálogo. `src/favicon.png` — icono de pestaña. `src/og.png` — imagen 1200×630 que muestran WhatsApp, Facebook, X, etc. al compartir un enlace (`og:image` en el `<head>` de cada página, con URL absoluta `https://mobventa.netlify.app/src/og.png`).
 - Para reemplazar el logo, sustituir esos tres archivos por otros con el mismo nombre y desplegar. WhatsApp y Facebook cachean la previsualización: para forzar la actualización, usar https://developers.facebook.com/tools/debug/ con la URL del sitio.
 - El nombre del sitio (Ajustes → Nombre del sitio) sigue usándose en la pestaña del navegador, en los correos y como texto alternativo del logo.
+
+## 17. Marca del sitio: logo o texto (016)
+
+Correr `supabase/016-marca.sql` (incluido en `000-base-completa.sql`). Añade dos ajustes: `marca_tipo` (`logo` o `texto`) y `marca_logo` (ruta del logo subido dentro del bucket `fotos`; vacío = `/src/logo.png`).
+
+En Administración → Ajustes → **Marca de la barra**: elegir entre mostrar el logo o el nombre del sitio, subir un logo propio (se convierte a PNG de 900 px máximo, conserva transparencia) y volver al logo por defecto. Solo administradores. El cambio se ve al instante en todas las páginas.
+
+La imagen de previsualización al compartir (`src/og.png`) sigue siendo un archivo del despliegue: para cambiarla hay que reemplazarla y volver a desplegar.

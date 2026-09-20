@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/src/app.css?v=16">
+<link rel="stylesheet" href="/src/app.css?v=17">
 </head>
 <body>
 <nav class="nav">
@@ -80,10 +80,11 @@
 
 <script type="module">
 import { sb, SITE_URL, clp, esc, fecha, hora, cargarCategorias, CONDICIONES, condicionLabel, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
-         estadoHTML, fotoUrl, fotoHTML, fail, toast, ICON, aplicarTitulo, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
+         estadoHTML, fotoUrl, fotoHTML, fail, toast, ICON, aplicarTitulo, marca, LOGO_BASE, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
 
 let tituloActual = TITULO_BASE;
-aplicarTitulo('Administración').then((t) => { tituloActual = t; });
+let marcaActual = { tipo: 'logo', logo: LOGO_BASE, logoPath: '' };
+aplicarTitulo('Administración').then((t) => { tituloActual = t; marcaActual = window.__marca || marcaActual; });
 
 let CATEGORIAS = [];
 
@@ -373,6 +374,26 @@ function vAjustes() {
           ${admin ? '<button class="btn btn-primary">Guardar</button>' : ''}
         </div>
       </form>
+      <div class="panel" id="panel-marca">
+        <div class="stack"><strong style="font-size:15px">Marca de la barra</strong><span class="sub" style="font-size:13px;color:var(--muted);line-height:1.5">Qué se ve arriba a la izquierda en todas las páginas. Al hacer clic siempre vuelve al catálogo.</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${[['logo', 'Logo'], ['texto', 'Nombre del sitio']].map(([v, l]) => `<button class="btn ${marcaActual.tipo === v ? 'btn-primary' : 'btn-secondary'}" data-marca-tipo="${v}" ${admin ? '' : 'disabled'} aria-pressed="${marcaActual.tipo === v}">${l}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line-2);border-radius:10px;background:var(--bg)">
+          <div style="flex:1;min-width:200px;display:flex;align-items:center;min-height:56px">
+            ${marcaActual.tipo === 'texto'
+              ? `<strong style="font-size:20px;letter-spacing:-.02em">${esc(tituloActual)}</strong>`
+              : `<img src="${esc(marcaActual.logo)}" alt="Logo actual" style="height:56px;width:auto;max-width:100%;object-fit:contain">`}
+          </div>
+          <span class="sub" style="font-size:12.5px;color:var(--muted)">Previsualización</span>
+        </div>
+        ${admin ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="file" id="logo-file" accept="image/*" hidden>
+          <button class="btn btn-secondary" id="logo-subir">${ICON.plus}${marcaActual.logoPath ? 'Cambiar logo' : 'Subir un logo'}</button>
+          ${marcaActual.logoPath ? '<button class="btn btn-ghost btn-danger" id="logo-quitar">Volver al logo por defecto</button>' : ''}
+          <span class="sub" style="font-size:12.5px;color:var(--muted);flex:1;min-width:220px">PNG con fondo transparente, horizontal, al menos 600 px de ancho.</span>
+        </div>` : ''}
+      </div>
       ${fila('ofertas_habilitadas', 'Permitir ofertas en todos los productos',
         `Interruptor general: al activarlo o desactivarlo se cambia el estado de ofertas de <strong>todos</strong> los productos publicados y queda como valor por defecto para los nuevos. Después puedes ajustar cada producto por separado desde su ficha o desde la lista. Ahora: ${conOfertas} de ${productos.length} ${productos.length === 1 ? 'producto acepta' : 'productos aceptan'} ofertas.`)}
       ${fila('ofertas_publicas', 'Mostrar la oferta más alta en público',
@@ -442,8 +463,47 @@ function vAjustes() {
       .upsert({ key: 'titulo_sitio', value: titulo, updated_by: me.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) return fail(error);
     tituloActual = await aplicarTitulo('Administración');
+    marcaActual = window.__marca || marcaActual;
     toast('Nombre del sitio guardado');
+    if (marcaActual.tipo === 'texto') render();
   };
+
+  view.querySelectorAll('[data-marca-tipo]').forEach((b) => b.onclick = async () => {
+    if (b.dataset.marcaTipo === marcaActual.tipo) return;
+    if (!await guardarAjuste('marca_tipo', b.dataset.marcaTipo)) return;
+    tituloActual = await aplicarTitulo('Administración');
+    marcaActual = window.__marca || marcaActual;
+    toast(b.dataset.marcaTipo === 'texto' ? 'La barra muestra el nombre del sitio' : 'La barra muestra el logo');
+    render();
+  });
+
+  document.getElementById('logo-subir')?.addEventListener('click', () => document.getElementById('logo-file').click());
+  document.getElementById('logo-file')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    const blob = await optimizarLogo(file);
+    if (!blob) return toast('No se pudo leer esa imagen; prueba con un PNG o JPG');
+    const path = `marca/${crypto.randomUUID()}.png`;
+    const up = await sb.storage.from('fotos').upload(path, blob, { contentType: 'image/png', upsert: false });
+    if (up.error) return fail(up.error);
+    const anterior = marcaActual.logoPath;
+    if (!await guardarAjuste('marca_logo', path)) return;
+    if (marcaActual.tipo !== 'logo') await guardarAjuste('marca_tipo', 'logo');
+    if (anterior) await sb.storage.from('fotos').remove([anterior]).catch(console.warn);
+    tituloActual = await aplicarTitulo('Administración');
+    marcaActual = window.__marca || marcaActual;
+    toast('Logo actualizado'); render();
+  });
+
+  document.getElementById('logo-quitar')?.addEventListener('click', async () => {
+    if (!confirm('¿Volver al logo por defecto? Se borra el logo que subiste.')) return;
+    const anterior = marcaActual.logoPath;
+    if (!await guardarAjuste('marca_logo', '')) return;
+    if (anterior) await sb.storage.from('fotos').remove([anterior]).catch(console.warn);
+    tituloActual = await aplicarTitulo('Administración');
+    marcaActual = window.__marca || marcaActual;
+    toast('Logo por defecto restaurado'); render();
+  });
 
   view.querySelectorAll('[data-aj]').forEach((b) => b.onclick = async () => {
     const value = b.dataset.to === 'true';
@@ -810,6 +870,26 @@ async function eliminarInteres(id, despues) {
 }
 
 const num = (v) => (v === '' || v == null || isNaN(+v)) ? null : +v;
+
+// Guarda un ajuste de site_settings (jsonb). Devuelve false si Supabase lo rechaza.
+async function guardarAjuste(key, value) {
+  const { error } = await sb.from('site_settings')
+    .upsert({ key, value, updated_by: me.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) { fail(error); return false; }
+  return true;
+}
+
+/* Prepara un logo antes de subirlo: PNG (conserva la transparencia), lado mayor ≤ 900 px. */
+async function optimizarLogo(file) {
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name)) return null;
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return null; }
+  const k = Math.min(1, 900 / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(bmp, 0, 0, w, h); bmp.close();
+  return await new Promise((r) => c.toBlob(r, 'image/png'));
+}
 
 // Elimina el producto con sus fotos, interesados, mensajes, ofertas y pagos. Bloqueado si hay un pago confirmado.
 async function eliminarProducto(id, despues) {

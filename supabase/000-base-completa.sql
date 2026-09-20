@@ -394,6 +394,8 @@ create table if not exists public.site_settings (
 );
 
 insert into public.site_settings (key, value) values
+  ('marca_tipo', '"logo"'::jsonb),
+  ('marca_logo', '""'::jsonb),
   ('ofertas_habilitadas', 'true'::jsonb),      -- los interesados pueden ofertar
   ('ofertas_publicas',    'true'::jsonb)       -- la oferta más alta se muestra en catálogo y detalle
 on conflict (key) do nothing;
@@ -875,6 +877,8 @@ alter table public.site_settings add constraint site_settings_updated_by_fkey
 
 -- Datos semilla: ajustes y categorías que el panel espera.
 insert into public.site_settings (key, value) values
+  ('marca_tipo', '"logo"'::jsonb),
+  ('marca_logo', '""'::jsonb),
   ('ofertas_habilitadas', 'true'::jsonb), ('ofertas_publicas', 'true'::jsonb),
   ('titulo_sitio', to_jsonb('Oferta de Muebles y Electrodomésticos'::text))
 on conflict (key) do nothing;

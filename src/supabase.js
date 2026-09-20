@@ -34,11 +34,27 @@ export async function tituloSitio() {
   const v = data?.value;
   return typeof v === 'string' && v.trim() ? v.trim() : TITULO_BASE;
 }
-// Pinta el título en la pestaña y como tooltip del logo (la marca de la barra es la imagen /src/logo.png); `sufijo` es el nombre de la página.
+// Marca de la barra: se elige en Administración → Ajustes.
+//   marca_tipo  'logo' (imagen) | 'texto' (solo el nombre del sitio)
+//   marca_logo  ruta en el bucket `fotos` de un logo subido; vacío = /src/logo.png
+export const LOGO_BASE = '/src/logo.png';
+export async function marca() {
+  const { data } = await sb.from('site_settings').select('key, value').in('key', ['titulo_sitio', 'marca_tipo', 'marca_logo']);
+  const v = (k) => (data || []).find((r) => r.key === k)?.value;
+  const t = typeof v('titulo_sitio') === 'string' && v('titulo_sitio').trim() ? v('titulo_sitio').trim() : TITULO_BASE;
+  const path = typeof v('marca_logo') === 'string' ? v('marca_logo').trim() : '';
+  return { titulo: t, tipo: v('marca_tipo') === 'texto' ? 'texto' : 'logo', logo: path ? fotoUrl(path) : LOGO_BASE, logoPath: path };
+}
+// Pinta la marca en la barra (logo o texto) y el título de la pestaña; `sufijo` es el nombre de la página.
 export async function aplicarTitulo(sufijo) {
-  const t = await tituloSitio();
-  window.__tituloSitio = t;
-  document.querySelectorAll('.nav .brand').forEach((el) => { el.title = t; el.setAttribute('aria-label', `${t}, ir al catálogo`); });
+  const m = await marca();
+  const t = m.titulo;
+  window.__tituloSitio = t; window.__marca = m;
+  document.querySelectorAll('.nav .brand').forEach((el) => {
+    el.title = t; el.setAttribute('aria-label', `${t}, ir al catálogo`);
+    el.classList.toggle('brand-texto', m.tipo === 'texto');
+    el.innerHTML = m.tipo === 'texto' ? esc(t) : `<img src="${esc(m.logo)}" alt="${esc(t)}">`;
+  });
   if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE) || document.title.startsWith(TITULO_BASE)) {
     document.title = sufijo ? `${sufijo} — ${t}` : t;
   }
