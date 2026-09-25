@@ -5,11 +5,12 @@
 // Usa las mismas variables de entorno que avisos.js (RESEND_API_KEY, MAIL_FROM,
 // SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).
 import { createClient } from '@supabase/supabase-js';
+import { withSentry, reportar } from '../lib/sentry.js';
 
 const SITE = process.env.URL || 'https://mobventa.netlify.app';
 const ok = () => new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
 
-export default async (req) => {
+const handler = async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   let email = '';
   try { email = String((await req.json()).email || '').trim().toLowerCase(); } catch { /* cuerpo inválido */ }
@@ -75,3 +76,5 @@ const plantilla = ({ titulo, cuerpo, pie }) => `
     ${pie ? `<p style="margin:22px 0 0;padding-top:18px;border-top:1px solid #EEECE7;font-size:12.5px;color:#6B6964">${pie}</p>` : ''}
   </div>
 </div>`;
+
+export default withSentry('recuperar', handler);

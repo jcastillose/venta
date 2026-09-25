@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mobventa-dev",
+      "runtimeExecutable": "/opt/homebrew/bin/netlify",
+      "runtimeArgs": [
+        "dev",
+        "--port",
+        "8888",
+        "--no-open"
+      ],
+      "port": 8888
+    },
+    {
+      "name": "mobventa-admin",
+      "url": "https://mobventa.netlify.app/admin"
+    },
+    {
+      "name": "mobventa-catalogo",
+      "url": "https://mobventa.netlify.app/"
+    }
+  ]
+}

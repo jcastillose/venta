@@ -3,12 +3,13 @@
 // país, región, ciudad y coordenadas aproximadas, sin servicio externo. La escritura
 // usa la clave service_role: la tabla no se puede insertar ni leer con la clave pública.
 import { createClient } from '@supabase/supabase-js';
+import { withSentry, reportar } from '../lib/sentry.js';
 
 const EVENTOS = new Set(['catalogo', 'producto', 'interes', 'busqueda', 'categoria']);
 const BOT = /(bot|crawler|spider|crawl|slurp|preview|monitor|headless|curl|wget|python-requests|lighthouse|pingdom|facebookexternalhit)/i;
 const corto = (s, n) => (s == null ? null : String(s).slice(0, n)) || null;
 
-export default async (req, context) => {
+const handler = async (req, context) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   let b = {};
   try { b = await req.json(); } catch { return new Response(null, { status: 400 }); }
@@ -41,3 +42,5 @@ export default async (req, context) => {
   if (error) console.error('visita', error.message);
   return new Response(null, { status: 204 });
 };
+
+export default withSentry('visita', handler);

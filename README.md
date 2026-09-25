@@ -33,6 +33,17 @@ Ejecutar en el SQL Editor de Supabase, en orden:
 
 Todos son re-ejecutables.
 
+## Sentry (errores en producción)
+
+Organización `agencements` (región EU). Dos proyectos:
+
+| Proyecto | Qué captura | Cómo se activa |
+| --- | --- | --- |
+| `mobventa-web` | errores JavaScript en las cinco páginas | `src/sentry.js` + loader de Sentry (`js-de.sentry-cdn.com`, región EU) en el `<head>` de cada HTML (solo errores, sin trazas ni replay; los enlaces `/c/<token>` se ocultan antes de enviar) |
+| `mobventa-functions` | excepciones en las funciones de Netlify | `netlify/lib/sentry.js`; cada función exporta `withSentry('nombre', handler)`. Lee `SENTRY_DSN_FUNCTIONS` de las variables de entorno de Netlify; sin ella no envía nada |
+
+Panel: https://agencements.sentry.io
+
 ## Netlify
 
 Base directory y Publish directory: raíz del repo (`.`); sin build command. `netlify.toml` ya trae las rutas `/p/*` y `/c/*`.
