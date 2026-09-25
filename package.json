@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
-    "@sentry/node": "^11.0.0"
+    "@supabase/supabase-js": "^2.45.4"
   }
 }

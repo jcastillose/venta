@@ -5,12 +5,11 @@
 // Usa las mismas variables de entorno que avisos.js (RESEND_API_KEY, MAIL_FROM,
 // SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).
 import { createClient } from '@supabase/supabase-js';
-import { withSentry, reportar } from '../lib/sentry.js';
 
 const SITE = process.env.URL || 'https://mobventa.netlify.app';
 const ok = () => new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
 
-const handler = async (req) => {
+export default async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   let email = '';
   try { email = String((await req.json()).email || '').trim().toLowerCase(); } catch { /* cuerpo inválido */ }
@@ -19,12 +18,12 @@ const handler = async (req) => {
   const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   // Tope: 3 envíos por correo cada hora (misma respuesta hacia afuera).
-  const { data: permitido, error: errTope } = await sb.rpc('recovery_allowed', { p_email: email });
-  if (errTope || permitido !== true) return ok();
+  const { data: permitido } = await sb.rpc('recovery_allowed', { p_email: email });
+  if (permitido === false) return ok();
 
   const { data: hilos } = await sb.from('interests')
     .select('token, status, created_at, products(title, price_clp, status)')
-    .ilike('buyer_contact', email.replace(/[\\%_]/g, (c) => '\\' + c))  // sin comodines: _ y % son literales
+    .ilike('buyer_contact', email)
     .neq('status', 'descartado')
     .order('created_at', { ascending: false });
   if (!hilos?.length) return ok();
@@ -76,5 +75,3 @@ const plantilla = ({ titulo, cuerpo, pie }) => `
     ${pie ? `<p style="margin:22px 0 0;padding-top:18px;border-top:1px solid #EEECE7;font-size:12.5px;color:#6B6964">${pie}</p>` : ''}
   </div>
 </div>`;
-
-export default withSentry('recuperar', handler);

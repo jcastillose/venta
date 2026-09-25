@@ -19,8 +19,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
@@ -41,6 +39,7 @@
     <p id="dlg-bajada"></p>
     <label class="field">Tu nombre<input name="nombre" required autocomplete="name"></label>
     <label class="field">Correo o WhatsApp<input name="contacto" required placeholder="+56 9 … o tu@correo.cl"></label>
+    <div id="aviso-correo"></div>
     <label class="field">Tu oferta (opcional)<input name="oferta" type="number" min="1000" step="1000" inputmode="numeric" placeholder="Ej. 150000"><span class="hint" id="oferta-hint">Precio publicado y oferta más alta abajo. Si dejas esto vacío, pides el producto al precio publicado.</span></label>
     <label class="field">Mensaje (opcional)<textarea name="mensaje" rows="3" placeholder="¿Cuándo podrías retirar? ¿Alguna duda?"></textarea></label>
     <div class="actions">
@@ -51,7 +50,8 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo } from '/src/supabase.js';
+import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo, avisoCorreoHTML } from '/src/supabase.js';
+document.getElementById('aviso-correo').innerHTML = avisoCorreoHTML();
 import { registrar } from '/src/visitas.js';
 
 aplicarTitulo('Producto');
@@ -202,7 +202,10 @@ form.onsubmit = async (e) => {
 
   const token = data;
   registrar('interes', { product_id: prod.id });
-  guardarToken(token, prod.title, prod.id);
+  guardarToken(token, prod.title);
+  const all = JSON.parse(localStorage.getItem('vh.tokens'));
+  all[0].productId = prod.id;
+  localStorage.setItem('vh.tokens', JSON.stringify(all));
   dlg.close();
   toast('Registramos tu interés. Te llevamos a tu conversación.');
   setTimeout(() => location.assign('/c/' + token), 900);

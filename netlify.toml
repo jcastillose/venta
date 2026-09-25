@@ -6,9 +6,6 @@
   [headers.values]
     X-Frame-Options = "SAMEORIGIN"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    X-Content-Type-Options = "nosniff"
-    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
 # Hilo privado de cada interesado: /c/<token>
 [[redirects]]

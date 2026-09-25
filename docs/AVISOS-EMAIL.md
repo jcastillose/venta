@@ -26,7 +26,7 @@ Site configuration → Environment variables:
 | --- | --- |
 | `RESEND_API_KEY` | `re_...` |
 | `MAIL_FROM` | `Nombre visible <avisos@tudominio.cl>`, p. ej. `Oferta de Muebles y Electrodomésticos <admin@contact.agencements.net>` (o `onboarding@resend.dev` para probar). Lo que va antes de `<` es el nombre que ve quien recibe el correo. |
-| `AVISOS_SECRET` | una frase larga y aleatoria (p. ej. la salida de `openssl rand -hex 24`). No la escribas en ningún archivo del repo. |
+| `AVISOS_SECRET` | una frase larga que inventes, ej. `mv-avisos-9f2c81b07d` |
 | `SUPABASE_URL` | `https://bxsldfwlbagvgxxhtfwc.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | la clave `service_role` de Supabase |
 
@@ -34,7 +34,7 @@ Vuelve a desplegar después de guardarlas (Deploys → *Trigger deploy → Clear
 
 ## 3. Disparadores en Supabase (por SQL)
 
-La interfaz de webhooks puede fallar («schema supabase_functions does not exist»), así que los avisos se crean por SQL. Abre **SQL Editor** y ejecuta, en este orden: (1) `select vault.create_secret('<valor de AVISOS_SECRET>', 'avisos_secret');` (2) `supabase/014-aviso-respuesta.sql` tal cual, para los triggers; (3) `supabase/018-avisos-vault.sql`, que deja `aviso_webhook()` leyendo el secreto desde Vault. Quedan la función y cuatro triggers:
+La interfaz de webhooks puede fallar («schema supabase_functions does not exist»), así que los avisos se crean por SQL. Abre **SQL Editor**, pega `supabase/014-aviso-respuesta.sql`, **reemplaza `TU_SECRETO`** por el valor exacto de `AVISOS_SECRET` en Netlify y ejecuta. Crea la función `aviso_webhook()` y cuatro triggers:
 
 | Trigger | Tabla | Evento |
 | --- | --- | --- |

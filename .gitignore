@@ -1,7 +1,6 @@
-# Local Netlify folder
-.netlify
-.DS_Store
+# Dependencias y artefactos locales
 node_modules/
+.netlify/
 .env
-supabase/.temp/
-deno.lock
+.env.*
+.DS_Store

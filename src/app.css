@@ -102,6 +102,15 @@ h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
 .note-ok{background:#F4FAF7;border:1px solid #CFE6DB;color:var(--accent-dark)}
 .note-warn{background:#FFFCF4;border:1px solid #EFE3C8;color:#8A6A1E}
 .note-plain{background:var(--surface);border:1px solid var(--line);color:var(--ink-2)}
+.aviso-correo{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:#FFFCF4;border:1px solid #EFE3C8;color:#8A6A1E;font-size:13px;line-height:1.5}
+.aviso-correo svg{flex:none;margin-top:2px}
+.aviso-correo>div{flex:1;min-width:0;display:grid;gap:2px}
+.aviso-correo b{font-weight:600;color:#6E5314;overflow-wrap:anywhere}
+.aviso-correo code{font-family:inherit;font-weight:700;background:#F6EBCB;padding:1px 6px;border-radius:5px}
+.aviso-correo .copiar{flex:none;align-self:center;min-height:32px;padding:0 12px;border:1px solid #E0CF9E;border-radius:999px;background:var(--surface);color:#6E5314;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.aviso-correo .copiar:hover{background:#F6EBCB}
+.aviso-correo.compacto{padding:10px 12px;font-size:12.5px}
+.aviso-correo.compacto span{display:none}
 .strip-pay{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .strip-pay .txt{flex:1;min-width:220px;display:grid;gap:4px}
 

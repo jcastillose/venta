@@ -126,6 +126,26 @@ export function fail(e) {
   toast(e?.message || 'Algo falló. Intenta de nuevo.');
 }
 
+// Aviso para que los correos del equipo no caigan en spam. Se muestra en el
+// formulario de interés, en el hilo privado y en la recuperación de enlaces.
+export const CORREO_AVISOS = 'admin@contact.agencements.net';
+export function avisoCorreoHTML(compacto = false) {
+  return `<div class="aviso-correo${compacto ? ' compacto' : ''}" role="note">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+    <div>
+      <b>Te escribiremos desde <code>${CORREO_AVISOS}</code></b>
+      <span>Agrega esa dirección a tus contactos y, si no ves nuestro correo, revisa la carpeta de spam o correo no deseado.</span>
+    </div>
+    <button type="button" class="copiar" data-copiar="${CORREO_AVISOS}">Copiar</button>
+  </div>`;
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('.aviso-correo .copiar');
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copiar); toast('Dirección copiada'); }
+  catch { toast(b.dataset.copiar); }
+});
+
 export const ICON = {
   back: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>',
   heart: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
@@ -141,10 +161,9 @@ export const ICON = {
 
 const KEY = 'vh.tokens';
 export const misTokens = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-export function guardarToken(t, productTitle, productId) {
-  const prev = misTokens().find((x) => x.token === t) || {};
+export function guardarToken(t, productTitle) {
   const all = misTokens().filter((x) => x.token !== t);
-  all.unshift({ ...prev, token: t, title: productTitle, productId: productId ?? prev.productId, at: Date.now() });
+  all.unshift({ token: t, title: productTitle, at: Date.now() });
   localStorage.setItem(KEY, JSON.stringify(all.slice(0, 40)));
 }
 export function olvidarToken(t) {

@@ -2,7 +2,6 @@
 // Solo un administrador activo puede llamarla.
 // Requiere en Netlify: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 import { createClient } from '@supabase/supabase-js';
-import { withSentry, reportar } from '../lib/sentry.js';
 
 // Si SUPABASE_URL falta o apunta a otro proyecto, el JWT del panel no valida.
 // Por eso el frontend manda su URL en x-supabase-url y aquí se compara.
@@ -10,7 +9,7 @@ const URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE = process.env.URL || 'https://mobventa.netlify.app';
 
-const handler = async (req) => {
+export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   if (!URL || !SERVICE) {
@@ -54,7 +53,6 @@ const handler = async (req) => {
     return json({ error: 'Acción desconocida' }, 400);
   } catch (e) {
     console.error(e);
-    await reportar(e, { funcion: 'cuentas', accion: accion || '' });
     return json({ error: e.message || 'Error inesperado' }, 400);
   }
 };
@@ -185,5 +183,3 @@ async function eliminar(admin, b, yo) {
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
-
-export default withSentry('cuentas', handler);

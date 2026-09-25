@@ -20,8 +20,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
@@ -55,15 +53,17 @@
       <button type="submit" class="btn btn-primary">Enviar enlaces</button>
     </form>
     <p id="rec-ok" class="hide" style="margin:0;font-size:13px;line-height:1.5;color:var(--ink-2);border-left:2px solid var(--verde);padding:8px 12px;background:var(--wash);border-radius:0 8px 8px 0">
-      Si ese correo tiene conversaciones, recibirás un mensaje con tus enlaces en un minuto. Revisa también la carpeta de spam.
+      Si ese correo tiene conversaciones, recibirás un mensaje con tus enlaces en un minuto.
     </p>
+    <div id="aviso-correo"></div>
     <p class="lead" style="font-size:12.5px">Si dejaste un teléfono en vez de correo, escríbele al equipo por WhatsApp y te reenviarán tu enlace.</p>
   </section>
 </main>
 
 <script type="module">
-import { esc, misTokens, olvidarToken, fail, toast, ICON, aplicarTitulo } from '/src/supabase.js';
+import { esc, misTokens, olvidarToken, fail, toast, ICON, aplicarTitulo, avisoCorreoHTML } from '/src/supabase.js';
 aplicarTitulo('Mis conversaciones');
+document.getElementById('aviso-correo').innerHTML = avisoCorreoHTML();
 
 const hilos = misTokens();
 if (hilos.length) {
