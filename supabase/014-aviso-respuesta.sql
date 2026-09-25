@@ -1,5 +1,6 @@
 -- 014 · Aviso por correo al interesado cuando el equipo responde.
--- Idempotente. Incorporado también en 000-base-completa.sql.
+-- Idempotente. NO está en 000-base-completa.sql: ejecutar después de 000.
+-- Desde 018-avisos-vault.sql la función lee el secreto de Vault; usa 014 solo por los triggers.
 --
 -- Reemplaza la creación manual de webhooks en la interfaz: los tres avisos
 -- existentes y el nuevo se disparan desde una sola función de trigger.

@@ -1,19 +1,19 @@
 -- Alta de la primera cuenta de administrador + contraseña inicial.
--- Ejecutar DESPUÉS de schema.sql y después de haber entrado al menos una vez
--- (el usuario debe existir en auth.users).
--- Supabase → SQL Editor → pegar todo → Run. Re-ejecutable.
+-- Ejecutar DESPUÉS de 000-base-completa.sql. Crea el usuario en Auth si no existe.
+-- Supabase → SQL Editor → pegar todo → Run. Re-ejecutable: si el usuario ya existe, NO toca su contraseña.
 
--- 1. Cambia estos tres valores y nada más.
+-- 1. Cambia estos tres valores y nada más. NUNCA subas este archivo con valores reales.
 --    La contraseña es temporal: cámbiala luego en la pantalla "Mi cuenta".
 do $$
 declare
-  v_email    text := 'jcastillo.se@gmail.com';
-  v_nombre   text := 'Jorge Castillo Sepúlveda';
-  v_password text := 'CambiaEstaClave123';
+  v_email    text := 'tu-correo@ejemplo.cl';
+  v_nombre   text := 'Nombre Apellido';
+  v_password text := 'CAMBIAR-ANTES-DE-EJECUTAR';
   v_id       uuid;
 begin
   select id into v_id from auth.users where lower(email) = lower(v_email);
 
+  if v_password = 'CAMBIAR-ANTES-DE-EJECUTAR' then raise exception 'Define v_password antes de ejecutar'; end if;
   if v_id is null then
     -- Crear el usuario directamente (no hay aún quien lo invite desde el panel).
     v_id := gen_random_uuid();
@@ -35,10 +35,9 @@ begin
   on conflict (id) do update
     set name = excluded.name, email = excluded.email, role = 'admin', status = 'activo';
 
-  -- Contraseña inicial, sin pasar por el correo (evita el límite de envíos).
+  -- Correo confirmado y metadatos; la contraseña solo se fija al crear el usuario (arriba).
   update auth.users
-     set encrypted_password = crypt(v_password, gen_salt('bf')),
-         email_confirmed_at = coalesce(email_confirmed_at, now()),
+     set email_confirmed_at = coalesce(email_confirmed_at, now()),
          raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', v_nombre, 'equipo', true, 'tiene_password', true),
          updated_at = now()
    where id = v_id;
