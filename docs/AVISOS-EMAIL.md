@@ -25,7 +25,7 @@ Site configuration → Environment variables:
 | Variable | Valor |
 | --- | --- |
 | `RESEND_API_KEY` | `re_...` |
-| `MAIL_FROM` | `Nombre visible <avisos@tudominio.cl>`, p. ej. `Oferta de Muebles y Electrodomésticos <admin@contact.agencements.net>` (o `onboarding@resend.dev` para probar). Lo que va antes de `<` es el nombre que ve quien recibe el correo. |
+| `MAIL_FROM` | `Nombre visible <remitente@dominio-verificado>`. Valor en uso: `Contacto Venta <admin@contact.agencements.net>` (dominio `contact.agencements.net` verificado en Resend). Debe coincidir con `CORREO_AVISOS` en `src/supabase.js`, que es la dirección que el sitio muestra a los interesados. Lo que va antes de `<` es el nombre que ve quien recibe el correo. |
 | `AVISOS_SECRET` | una frase larga y aleatoria (p. ej. la salida de `openssl rand -hex 24`). No la escribas en ningún archivo del repo. |
 | `SUPABASE_URL` | `https://bxsldfwlbagvgxxhtfwc.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | la clave `service_role` de Supabase |

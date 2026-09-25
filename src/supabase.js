@@ -128,6 +128,7 @@ export function fail(e) {
 
 // Aviso para que los correos del equipo no caigan en spam. Se muestra en el
 // formulario de interés, en el hilo privado y en la recuperación de enlaces.
+// Debe coincidir con la dirección de MAIL_FROM en Netlify (ver docs/AVISOS-EMAIL.md).
 export const CORREO_AVISOS = 'admin@contact.agencements.net';
 export function avisoCorreoHTML(compacto = false) {
   return `<div class="aviso-correo${compacto ? ' compacto' : ''}" role="note">
