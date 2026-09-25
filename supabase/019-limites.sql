@@ -14,7 +14,7 @@ create index if not exists interests_contact_idx on public.interests (lower(buye
 create unique index if not exists interests_una_reserva on public.interests (product_id)
   where status in ('reservado', 'vendido');
 
--- create_interest con topes: 1 hilo abierto por contacto y producto, 5 intereses por contacto y hora,
+-- create_interest con topes: 1 hilo abierto por contacto y producto, 10 intereses por contacto y hora,
 -- 30 por producto cada 10 minutos.
 create or replace function public.create_interest(p_product uuid, p_name text, p_contact text, p_message text default null, p_offer integer default null)
 returns text language plpgsql security definer set search_path = public as $$
@@ -36,7 +36,7 @@ begin
     raise exception 'Ya hay una conversación abierta sobre este producto con ese contacto. Usa el enlace que recibiste o recupéralo en /mis-conversaciones';
   end if;
   if (select count(*) from public.interests
-      where lower(buyer_contact) = lower(p_contact) and created_at > now() - interval '1 hour') >= 5 then
+      where lower(buyer_contact) = lower(p_contact) and created_at > now() - interval '1 hour') >= 10 then
     raise exception 'Demasiadas solicitudes en poco tiempo con ese contacto. Inténtalo más tarde';
   end if;
   if (select count(*) from public.interests

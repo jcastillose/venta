@@ -161,9 +161,10 @@ export const ICON = {
 
 const KEY = 'vh.tokens';
 export const misTokens = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-export function guardarToken(t, productTitle) {
+export function guardarToken(t, productTitle, productId) {
+  const prev = misTokens().find((x) => x.token === t) || {};
   const all = misTokens().filter((x) => x.token !== t);
-  all.unshift({ token: t, title: productTitle, at: Date.now() });
+  all.unshift({ ...prev, token: t, title: productTitle, productId: productId ?? prev.productId, at: Date.now() });
   localStorage.setItem(KEY, JSON.stringify(all.slice(0, 40)));
 }
 export function olvidarToken(t) {

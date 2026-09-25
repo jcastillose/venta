@@ -10,10 +10,11 @@
 //   SUPABASE_URL              https://bxsldfwlbagvgxxhtfwc.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY la clave service_role
 import { createClient } from '@supabase/supabase-js';
+import { withSentry, reportar } from '../lib/sentry.js';
 
 const SITE = process.env.URL || 'https://mobventa.netlify.app';
 
-export default async (req) => {
+const handler = async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (req.headers.get('x-avisos-secret') !== process.env.AVISOS_SECRET) {
     return new Response('Forbidden', { status: 403 });
@@ -189,3 +190,5 @@ const plantilla = ({ titulo, cuerpo, cta, pie }) => `
     ${pie ? `<p style="margin:22px 0 0;padding-top:18px;border-top:1px solid #EEECE7;font-size:12.5px;color:#6B6964">${pie}</p>` : ''}
   </div>
 </div>`;
+
+export default withSentry('avisos', handler);
