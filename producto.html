@@ -202,10 +202,7 @@ form.onsubmit = async (e) => {
 
   const token = data;
   registrar('interes', { product_id: prod.id });
-  guardarToken(token, prod.title);
-  const all = JSON.parse(localStorage.getItem('vh.tokens'));
-  all[0].productId = prod.id;
-  localStorage.setItem('vh.tokens', JSON.stringify(all));
+  guardarToken(token, prod.title, prod.id);
   dlg.close();
   toast('Registramos tu interés. Te llevamos a tu conversación.');
   setTimeout(() => location.assign('/c/' + token), 900);

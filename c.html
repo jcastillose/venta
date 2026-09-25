@@ -77,7 +77,7 @@ async function cargar() {
   const t = Array.isArray(data) ? data[0] : data;
   if (error || !t) { cont.innerHTML = '<p class="spinner">Este enlace no corresponde a ninguna conversación.</p>'; return; }
   hilo = t;
-  guardarToken(token, t.product_title);
+  guardarToken(token, t.product_title, t.product_id);
 
   const [{ data: ms }, { data: fs }, { data: op }] = await Promise.all([
     sb.rpc('messages_by_token', { p_token: token }),
@@ -158,6 +158,13 @@ const franja = (cls, dot, title, body, cta = '') => `
 
 function pintar() {
   const foto = fotoUrl(cover);
+  // El sondeo periódico vuelve a pintar todo: conservar lo que la persona escribe, el foco y su posición de lectura.
+  const prevInput = document.querySelector('#form-msg input[name=body]');
+  const borrador = prevInput?.value || '';
+  const teniaFoco = !!prevInput && document.activeElement === prevInput;
+  const prevLog = document.getElementById('log');
+  const estabaAbajo = !prevLog || (prevLog.scrollHeight - prevLog.scrollTop - prevLog.clientHeight) < 40;
+  const scrollPrevio = prevLog?.scrollTop || 0;
   cont.innerHTML = `
     <div style="padding-top:20px"><a class="btn btn-ghost" href="/p/${hilo.product_id}">${ICON.back}Ver el producto</a></div>
     <section class="chat" style="margin-top:16px">
@@ -190,7 +197,10 @@ function pintar() {
   document.getElementById('btn-borrar-hilo')?.addEventListener('click', borrarHilo);
 
   const log = document.getElementById('log');
-  log.scrollTop = log.scrollHeight;
+  log.scrollTop = estabaAbajo ? log.scrollHeight : scrollPrevio;
+  const input = document.querySelector('#form-msg input[name=body]');
+  if (input && borrador) input.value = borrador;
+  if (input && teniaFoco) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   document.getElementById('btn-pagar')?.addEventListener('click', abrirPago);
   document.getElementById('btn-ofertar')?.addEventListener('click', abrirOferta);
 

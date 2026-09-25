@@ -22,16 +22,17 @@ Sitio estático (HTML + ES modules) desplegado en **Netlify**, datos en **Supaba
 
 ## Base de datos
 
-Ejecutar en el SQL Editor de Supabase, en orden:
+Ejecutar en el SQL Editor de Supabase, en orden. Todos son re-ejecutables.
 
-1. `supabase/schema.sql`
-2. `supabase/002-ofertas.sql`
-3. `supabase/003-ajustes.sql`
-4. `supabase/004-categorias.sql`
-5. `supabase/005-titulo.sql`
-6. `supabase/bootstrap-admin.sql` (primera cuenta de administrador; editar correo, nombre y contraseña antes)
+1. `supabase/000-base-completa.sql` — crea o repara todo (equivale a `schema.sql` + 002…013, 015 y 016).
+2. `supabase/014-aviso-respuesta.sql` — triggers de avisos (ver `docs/AVISOS-EMAIL.md`).
+3. `supabase/017-seguridad.sql` — correcciones de la revisión de seguridad.
+4. `supabase/018-avisos-vault.sql` — el secreto de avisos se lee desde Vault (crear antes el secreto `avisos_secret`).
+5. `supabase/019-limites.sql` — topes al marcar interés y una sola reserva por producto.
+6. `supabase/bootstrap-admin.sql` — primera cuenta de administrador; editar correo, nombre y contraseña antes y no subir el archivo con valores reales.
 
-Todos son re-ejecutables.
+En el dashboard: Authentication → Providers → Email → desactivar *Allow new users to sign up*.
+`schema.sql` y 002…007 se conservan solo como historial; no ejecutarlos sobre una base ya migrada.
 
 ## Sentry (errores en producción)
 

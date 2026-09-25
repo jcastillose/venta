@@ -19,12 +19,12 @@ const handler = async (req) => {
   const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   // Tope: 3 envíos por correo cada hora (misma respuesta hacia afuera).
-  const { data: permitido } = await sb.rpc('recovery_allowed', { p_email: email });
-  if (permitido === false) return ok();
+  const { data: permitido, error: errTope } = await sb.rpc('recovery_allowed', { p_email: email });
+  if (errTope || permitido !== true) return ok();
 
   const { data: hilos } = await sb.from('interests')
     .select('token, status, created_at, products(title, price_clp, status)')
-    .ilike('buyer_contact', email)
+    .ilike('buyer_contact', email.replace(/[\\%_]/g, (c) => '\\' + c))  // sin comodines: _ y % son literales
     .neq('status', 'descartado')
     .order('created_at', { ascending: false });
   if (!hilos?.length) return ok();
