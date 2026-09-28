@@ -12,7 +12,9 @@ window.sentryOnLoad = function () {
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
-    ignoreErrors: [/ResizeObserver loop/, /Load failed/, /NetworkError/, /AbortError/],
+    // "Script error." es el mensaje opaco que da el navegador cuando falla un script de otro origen
+    // (extensiones, navegadores integrados de apps, bloqueadores): sin pila ni detalle, no es accionable.
+    ignoreErrors: [/ResizeObserver loop/, /Load failed/, /NetworkError/, /AbortError/, /Script error\.?/, /captured as exception with message `Script error/],
     initialScope: { tags: { pagina: location.pathname.split('/')[1] || 'catalogo' } },
     beforeSend: function (event) {
       if (event.request && event.request.url) event.request.url = ocultar(event.request.url);
