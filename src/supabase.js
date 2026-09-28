@@ -37,13 +37,34 @@ export async function tituloSitio() {
 // Marca de la barra: se elige en Administración → Ajustes.
 //   marca_tipo  'logo' (imagen) | 'texto' (solo el nombre del sitio)
 //   marca_logo  ruta en el bucket `fotos` de un logo subido; vacío = /src/logo.png
-export const LOGO_BASE = '/src/logo.png';
+// /marca/logo.png es la dirección oficial: la función netlify/functions/marca.js devuelve el logo
+// cargado en Ajustes (o el por defecto). Páginas, correos, redes y favicon apuntan ahí.
+export const LOGO_BASE = '/marca/logo.png';
 export async function marca() {
   const { data } = await sb.from('site_settings').select('key, value').in('key', ['titulo_sitio', 'marca_tipo', 'marca_logo']);
   const v = (k) => (data || []).find((r) => r.key === k)?.value;
   const t = typeof v('titulo_sitio') === 'string' && v('titulo_sitio').trim() ? v('titulo_sitio').trim() : TITULO_BASE;
   const path = typeof v('marca_logo') === 'string' ? v('marca_logo').trim() : '';
   return { titulo: t, tipo: v('marca_tipo') === 'texto' ? 'texto' : 'logo', logo: path ? fotoUrl(path) : LOGO_BASE, logoPath: path };
+}
+// Favicon a partir del logo oficial: se dibuja centrado en un cuadrado (los navegadores muestran el icono en un cuadro).
+let faviconHecho = false;
+export function faviconDesdeLogo(url = LOGO_BASE) {
+  if (faviconHecho) return; faviconHecho = true;
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const S = 128, c = document.createElement('canvas'); c.width = S; c.height = S;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, S, S);
+      const k = Math.min((S - 12) / img.width, (S - 12) / img.height);
+      const w = img.width * k, h = img.height * k;
+      ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+      let link = document.querySelector('link[rel="icon"]');
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+      link.type = 'image/png'; link.href = c.toDataURL('image/png');
+    } catch { /* el favicon estático se mantiene */ }
+  };
+  img.src = url;
 }
 // Pinta la marca en la barra (logo o texto) y el título de la pestaña; `sufijo` es el nombre de la página.
 export async function aplicarTitulo(sufijo) {
@@ -53,8 +74,12 @@ export async function aplicarTitulo(sufijo) {
   document.querySelectorAll('.nav .brand').forEach((el) => {
     el.title = t; el.setAttribute('aria-label', `${t}, ir al catálogo`);
     el.classList.toggle('brand-texto', m.tipo === 'texto');
-    el.innerHTML = m.tipo === 'texto' ? esc(t) : `<img src="${esc(m.logo)}" alt="${esc(t)}">`;
+    if (m.tipo === 'texto') { el.innerHTML = esc(t); return; }
+    // El HTML ya trae <img src="/marca/logo.png">, que es el logo oficial: no se reemplaza (evita el parpadeo).
+    const img = el.querySelector('img');
+    if (img) img.alt = t; else el.innerHTML = `<img src="${LOGO_BASE}" alt="${esc(t)}">`;
   });
+  faviconDesdeLogo();
   if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE) || document.title.startsWith(TITULO_BASE)) {
     document.title = sufijo ? `${sufijo} — ${t}` : t;
   }

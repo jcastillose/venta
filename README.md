@@ -18,6 +18,7 @@ Sitio estático (HTML + ES modules) desplegado en **Netlify**, datos en **Supaba
 | `src/app.css` | estilos |
 | `netlify/functions/cuentas.js` | crear, editar y eliminar cuentas (solo administrador) |
 | `netlify/functions/avisos.js` | avisos por correo con Resend (opcional) |
+| `netlify/functions/marca.js` | sirve `/marca/logo.png`, el logo oficial: el cargado en Ajustes o, si no hay, `src/logo.png`. Lo usan la barra de todas las páginas, los correos, la vista previa en redes (`og:image`) y el favicon |
 | `supabase/` | migraciones SQL, en orden |
 
 ## Base de datos

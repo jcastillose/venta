@@ -10,6 +10,12 @@
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
+# Logo oficial (el cargado en Ajustes, o el por defecto): una sola dirección para páginas, correos y redes
+[[redirects]]
+  from = "/marca/*"
+  to = "/.netlify/functions/marca"
+  status = 200
+
 # Hilo privado de cada interesado: /c/<token>
 [[redirects]]
   from = "/c/*"

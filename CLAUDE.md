@@ -27,6 +27,7 @@ La sesión del panel la inicia Jorge en el navegador integrado (correo + contras
 
 - `src/supabase.js`: cliente, constantes, utilidades. `src/visitas.js`: registro de visitas.
 - `netlify/lib/sentry.js`: `withSentry` y `reportar` para las funciones; `src/sentry.js`: configuración del loader de Sentry en el navegador.
+- `netlify/functions/marca.js`: logo oficial en `/marca/logo.png` (Ajustes → marca_logo, o `src/logo.png` por defecto); páginas, correos y og:image apuntan ahí.
 - `netlify/functions/`: `cuentas.js` (cuentas, solo admin), `avisos.js` (correos Resend), `recuperar.js`, `visita.js`.
 - `supabase/`: `000-base-completa.sql` crea o repara todo y es re-ejecutable; luego migraciones 008 a 016 en orden y `bootstrap-admin.sql`.
 - RPC que usa el panel: `activar_invitacion`, `close_deal`, `confirm_payment`, `delete_category`, `delete_interest`, `delete_product`, `discard_interest`, `reopen_interest`, `set_offers_for_all`, `visits_summary`.
