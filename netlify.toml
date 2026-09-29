@@ -10,6 +10,18 @@
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
+# Librerías con versión en el nombre: inmutables, un año de caché.
+[[headers]]
+  for = "/src/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Imágenes estáticas del sitio (favicon, logo por defecto): un día; el nombre no cambia pero sí rara vez el contenido.
+[[headers]]
+  for = "/src/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
 # Logo oficial (el cargado en Ajustes, o el por defecto): una sola dirección para páginas, correos y redes
 [[redirects]]
   from = "/marca/*"

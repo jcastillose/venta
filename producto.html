@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-version="18">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,14 +17,17 @@
 <meta name="twitter:image" content="https://mobventa.netlify.app/marca/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://bxsldfwlbagvgxxhtfwc.supabase.co">
+<link rel="modulepreload" href="/src/vendor/supabase-js-2.45.4.js">
+<link rel="modulepreload" href="/src/supabase.js">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
+<script defer src="/src/sentry.js"></script>
+<script defer src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" alt="MobVenta — Venta de muebles por cambio de casa"></a>
+  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" width="900" height="450" fetchpriority="high" decoding="async" alt="MobVenta — Venta de muebles por cambio de casa"></a>
   <a href="/">Catálogo</a>
   <a href="/mis-conversaciones">Mis conversaciones</a>
   <a href="/admin.html">Administración</a>
@@ -52,7 +55,7 @@
 </dialog>
 
 <script type="module">
-import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo, avisoCorreoHTML } from '/src/supabase.js';
+import { sb, clp, esc, fecha, condicionLabel, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, toast, guardarToken, misTokens, ICON, METODOS, aplicarTitulo, avisoCorreoHTML, miniUrl, ajustesSitio } from '/src/supabase.js';
 document.getElementById('aviso-correo').innerHTML = avisoCorreoHTML();
 import { registrar } from '/src/visitas.js';
 
@@ -68,9 +71,9 @@ async function cargar() {
   if (!id) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
   const [{ data: p, error }, { data: f }, { data: m }, { data: st }] = await Promise.all([
     sb.from('catalog').select('*').eq('id', id).single(),
-    sb.from('product_photos').select('storage_path,position').eq('product_id', id).order('position'),
+    sb.from('product_photos').select('storage_path,thumb_path,position').eq('product_id', id).order('position'),
     sb.from('payment_options').select('method'),
-    sb.from('site_settings').select('key,value'),
+    ajustesSitio().then((data) => ({ data })),
   ]);
   if (error || !p) { cont.innerHTML = '<p class="spinner">Producto no encontrado.</p>'; return; }
   (st || []).forEach((r) => { ajustes[r.key] = r.value === true; });
@@ -108,7 +111,7 @@ function pintar() {
   cont.innerHTML = `<section class="detail">
     <div class="gallery">
       <div class="main">
-        ${foto ? fotoHTML(foto, p.title, false) : placeholderSVG(p.category)}
+        ${foto ? fotoHTML(foto, p.title, false, idx === 0, miniUrl(fotos[idx])) : placeholderSVG(p.category)}
         ${fotos.length > 1 ? `<div class="gal-nav">
           <span class="gal-count">${idx + 1} / ${fotos.length}</span>
           <button type="button" id="foto-prev" aria-label="Foto anterior"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -116,8 +119,8 @@ function pintar() {
         </div>` : ''}
       </div>
       ${fotos.length > 1 ? `<div class="strip">${fotos.map((f, i) => {
-        const u = fotoUrl(f.storage_path);
-        return `<button type="button" data-i="${i}" ${i === idx ? 'aria-current="true"' : ''} aria-label="Foto ${i + 1}"><img src="${u}" alt=""></button>`;
+        const u = miniUrl(f);
+        return `<button type="button" data-i="${i}" ${i === idx ? 'aria-current="true"' : ''} aria-label="Foto ${i + 1}"><img src="${u}" alt="" loading="lazy" decoding="async"></button>`;
       }).join('')}</div>` : ''}
     </div>
     <div style="display:grid;gap:18px;align-content:start;padding-top:6px">

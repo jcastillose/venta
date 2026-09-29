@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-version="18">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,14 +18,17 @@
 <meta name="twitter:image" content="https://mobventa.netlify.app/marca/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://bxsldfwlbagvgxxhtfwc.supabase.co">
+<link rel="modulepreload" href="/src/vendor/supabase-js-2.45.4.js">
+<link rel="modulepreload" href="/src/supabase.js">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
+<script defer src="/src/sentry.js"></script>
+<script defer src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" alt="MobVenta — Venta de muebles por cambio de casa"></a>
+  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" width="900" height="450" fetchpriority="high" decoding="async" alt="MobVenta — Venta de muebles por cambio de casa"></a>
   <a href="/">Catálogo</a>
   <a href="/mis-conversaciones">Mis conversaciones</a>
 </nav>
@@ -81,11 +84,11 @@ async function cargar() {
 
   const [{ data: ms }, { data: fs }, { data: op }] = await Promise.all([
     sb.rpc('messages_by_token', { p_token: token }),
-    sb.from('product_photos').select('storage_path').eq('product_id', t.product_id).order('position').limit(1),
+    sb.from('product_photos').select('storage_path,thumb_path').eq('product_id', t.product_id).order('position').limit(1),
     sb.rpc('payment_options_by_token', { p_token: token }),
   ]);
   mensajes = ms || [];
-  cover = fs?.[0]?.storage_path || null;
+  cover = fs?.[0] ? (fs[0].thumb_path || fs[0].storage_path) : null;
   opciones = op || [];
   pintar();
 }
@@ -282,8 +285,31 @@ document.getElementById('form-pago').onsubmit = async (e) => {
   cargar();
 };
 
-cargar();
-setInterval(cargar, 20000);
+// Sondeo: solo hilo y mensajes (la portada y los medios de pago no cambian), en pausa con la pestaña
+// oculta y sin repintar si nada cambió. Cada 20 s con actividad reciente; cada 60 s tras 5 min sin novedades.
+let firma = '', ultimoCambio = Date.now();
+const firmaDe = (h, ms) => JSON.stringify([h.interest_status, h.product_status, h.payment_status, h.payment_reference,
+  h.top_offer_clp, h.my_offer_clp, h.offer_count, ms.length, ms.at(-1)?.id]);
+async function sondear() {
+  if (document.hidden || !hilo) return;
+  const [{ data: t }, { data: ms }] = await Promise.all([
+    sb.rpc('thread_by_token', { p_token: token }),
+    sb.rpc('messages_by_token', { p_token: token }),
+  ]);
+  const h = Array.isArray(t) ? t[0] : t;
+  if (!h) return;
+  const nueva = firmaDe(h, ms || []);
+  if (nueva === firma) return;
+  firma = nueva; ultimoCambio = Date.now();
+  hilo = h; mensajes = ms || [];
+  pintar();
+}
+function programar() {
+  const espera = Date.now() - ultimoCambio > 5 * 60_000 ? 60_000 : 20_000;
+  setTimeout(async () => { try { await sondear(); } finally { programar(); } }, espera);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sondear(); });
+cargar().then(() => { if (hilo) firma = firmaDe(hilo, mensajes); programar(); });
 </script>
 </body>
 </html>

@@ -22,12 +22,11 @@ const handler = async (req) => {
   const { data: permitido, error: errTope } = await sb.rpc('recovery_allowed', { p_email: email });
   if (errTope || permitido !== true) return ok();
 
-  const { data: hilos } = await sb.from('interests')
-    .select('token, status, created_at, products(title, price_clp, status)')
-    .ilike('buyer_contact', email.replace(/[\\%_]/g, (c) => '\\' + c))  // sin comodines: _ y % son literales
-    .neq('status', 'descartado')
-    .order('created_at', { ascending: false });
-  if (!hilos?.length) return ok();
+  // Igualdad normalizada en la base (lower = lower): usa interests_contact_idx; solo service_role puede llamarla.
+  const { data: resultado } = await sb.rpc('interests_by_contact', { p_email: email });
+  const hilos = (resultado || []).map((h) => ({ token: h.token, status: h.status, created_at: h.created_at,
+    products: { title: h.title, price_clp: h.price_clp, status: h.product_status } }));
+  if (!hilos.length) return ok();
 
   const ESTADO = { nuevo: 'Nuevo', conversando: 'En conversación', reservado: 'Reservado', vendido: 'Vendido' };
   const filas = hilos.map((h) => `

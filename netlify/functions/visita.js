@@ -5,6 +5,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { withSentry, reportar } from '../lib/sentry.js';
 
+// Un solo cliente por instancia: las invocaciones «calientes» lo reutilizan.
+const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const EVENTOS = new Set(['catalogo', 'producto', 'interes', 'busqueda', 'categoria']);
 const BOT = /(bot|crawler|spider|crawl|slurp|preview|monitor|headless|curl|wget|python-requests|lighthouse|pingdom|facebookexternalhit)/i;
 const corto = (s, n) => (s == null ? null : String(s).slice(0, n)) || null;
@@ -19,8 +21,6 @@ const handler = async (req, context) => {
   const geo = context.geo || {};
   const device = /iPad|Tablet/i.test(ua) ? 'tablet' : /Mobi|Android|iPhone/i.test(ua) ? 'móvil' : 'escritorio';
   const uuid = /^[0-9a-f-]{36}$/i.test(b.product_id || '') ? b.product_id : null;
-
-  const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const { error } = await sb.from('visits').insert({
     event: b.event,
     path: corto(b.path, 200),

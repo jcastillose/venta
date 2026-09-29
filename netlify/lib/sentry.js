@@ -1,21 +1,29 @@
 // Sentry en las funciones de Netlify (proyecto mobventa-functions).
 // Requiere la variable de entorno SENTRY_DSN_FUNCTIONS; sin ella no hace nada.
-import * as Sentry from '@sentry/node';
-
+// @sentry/node (con OpenTelemetry) pesa varios MB y tarda 150-400 ms en inicializarse: se carga
+// solo cuando hay algo que reportar, así el arranque en frío de cada función no lo paga.
 const dsn = process.env.SENTRY_DSN_FUNCTIONS;
-if (dsn) {
-  Sentry.init({
-    dsn,
-    environment: process.env.CONTEXT || 'production',
-    release: process.env.COMMIT_REF ? `mobventa@${process.env.COMMIT_REF.slice(0, 7)}` : undefined,
-    sendDefaultPii: false,
-    tracesSampleRate: 0,
-  });
+let sentryPromise = null;
+async function cargarSentry() {
+  if (!sentryPromise) {
+    sentryPromise = import('@sentry/node').then((Sentry) => {
+      Sentry.init({
+        dsn,
+        environment: process.env.CONTEXT || 'production',
+        release: process.env.COMMIT_REF ? `mobventa@${process.env.COMMIT_REF.slice(0, 7)}` : undefined,
+        sendDefaultPii: false,
+        tracesSampleRate: 0,
+      });
+      return Sentry;
+    });
+  }
+  return sentryPromise;
 }
 
 /** Registra una excepción con contexto de la función. Seguro de llamar sin DSN. */
 export async function reportar(e, extra = {}) {
   if (!dsn) return;
+  const Sentry = await cargarSentry();
   Sentry.withScope((scope) => {
     for (const [k, v] of Object.entries(extra)) scope.setTag(k, String(v));
     Sentry.captureException(e);

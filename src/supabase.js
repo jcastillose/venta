@@ -1,4 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+// supabase-js 2.45.4 empaquetado en un solo archivo (esbuild, ver docs/RENDIMIENTO.md): 1 petición en vez de 10 a esm.sh.
+import { createClient } from './vendor/supabase-js-2.45.4.js';
 
 export const SUPABASE_URL = 'https://bxsldfwlbagvgxxhtfwc.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4c2xkZndsYmFndmd4eGh0ZndjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1MTkxODMsImV4cCI6MjEwNTA5NTE4M30.GkNC5INt8dB7o3t8EH89Jh_SrwaxW4Lp1AIoFnsx_-Y';
@@ -40,18 +41,26 @@ export async function tituloSitio() {
 // /marca/logo.png es la dirección oficial: la función netlify/functions/marca.js devuelve el logo
 // cargado en Ajustes (o el por defecto). Páginas, correos, redes y favicon apuntan ahí.
 export const LOGO_BASE = '/marca/logo.png';
+// Ajustes del sitio: una sola lectura por página, compartida por la barra, el título y el catálogo.
+let ajustesPromesa = null;
+export function ajustesSitio() {
+  return ajustesPromesa ||= sb.from('site_settings').select('key,value').then(({ data }) => data || []);
+}
+export function ajustesFrescos() { ajustesPromesa = null; return ajustesSitio(); }
+
 export async function marca() {
-  const { data } = await sb.from('site_settings').select('key, value').in('key', ['titulo_sitio', 'marca_tipo', 'marca_logo']);
-  const v = (k) => (data || []).find((r) => r.key === k)?.value;
+  const data = await ajustesSitio();
+  const v = (k) => data.find((r) => r.key === k)?.value;
   const t = typeof v('titulo_sitio') === 'string' && v('titulo_sitio').trim() ? v('titulo_sitio').trim() : TITULO_BASE;
   const path = typeof v('marca_logo') === 'string' ? v('marca_logo').trim() : '';
   return { titulo: t, tipo: v('marca_tipo') === 'texto' ? 'texto' : 'logo', logo: path ? fotoUrl(path) : LOGO_BASE, logoPath: path };
 }
 // Favicon a partir del logo oficial: se dibuja centrado en un cuadrado (los navegadores muestran el icono en un cuadro).
 let faviconHecho = false;
-export function faviconDesdeLogo(url = LOGO_BASE) {
-  if (faviconHecho) return; faviconHecho = true;
-  const img = new Image();
+export function faviconDesdeLogo(url = LOGO_BASE, personalizado = false) {
+  // Con el logo por defecto basta /src/favicon.png; con logo propio se dibuja en tiempo ocioso.
+  if (faviconHecho || !personalizado) return; faviconHecho = true;
+  (window.requestIdleCallback || ((f) => setTimeout(f, 1)))(() => { const img = new Image();
   img.onload = () => {
     try {
       const S = 128, c = document.createElement('canvas'); c.width = S; c.height = S;
@@ -64,7 +73,7 @@ export function faviconDesdeLogo(url = LOGO_BASE) {
       link.type = 'image/png'; link.href = c.toDataURL('image/png');
     } catch { /* el favicon estático se mantiene */ }
   };
-  img.src = url;
+  img.src = url; });
 }
 // Pinta la marca en la barra (logo o texto) y el título de la pestaña; `sufijo` es el nombre de la página.
 export async function aplicarTitulo(sufijo) {
@@ -79,7 +88,7 @@ export async function aplicarTitulo(sufijo) {
     const img = el.querySelector('img');
     if (img) img.alt = t; else el.innerHTML = `<img src="${LOGO_BASE}" alt="${esc(t)}">`;
   });
-  faviconDesdeLogo();
+  faviconDesdeLogo(LOGO_BASE, !!m.logoPath);
   if (!document.title.includes(' — ') || document.title.endsWith(TITULO_BASE) || document.title.startsWith(TITULO_BASE)) {
     document.title = sufijo ? `${sufijo} — ${t}` : t;
   }
@@ -95,10 +104,14 @@ export const fotoUrl = (path) => path ? sb.storage.from('fotos').getPublicUrl(pa
 
 // Foto completa dentro de su cuadro: la imagen entera (object-fit: contain) sobre una
 // copia desenfocada de sí misma que rellena el fondo. Usar dentro de .thumb, .gallery .main o .photo.
-export const fotoHTML = (url, alt = '', lazy = true) => {
+// Miniatura de una foto (thumb_path, ~640 px, generada al subir) o el original si aún no existe.
+export const miniUrl = (f) => f ? fotoUrl(f.thumb_path || f.storage_path) : null;
+// `alta`: la imagen es visible al cargar (fetchpriority=high, sin lazy). `fondo`: URL pequeña para la copia desenfocada.
+export const fotoHTML = (url, alt = '', lazy = true, alta = false, fondo = null) => {
   if (!url) return '';
-  const l = lazy ? ' loading="lazy" decoding="async"' : ' decoding="async"';
-  return `<img class="fondo" src="${url}" alt="" aria-hidden="true"${l}><img class="obj" src="${url}" alt="${esc(alt)}"${l}>`;
+  const l = lazy && !alta ? ' loading="lazy" decoding="async"' : ' decoding="async"';
+  const pr = alta ? ' fetchpriority="high"' : '';
+  return `<img class="fondo" src="${fondo || url}" alt="" aria-hidden="true" loading="lazy" decoding="async"><img class="obj" src="${url}" alt="${esc(alt)}"${l}${pr}>`;
 };
 
 export const ESTADO = {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-version="18">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,14 +18,17 @@
 <meta name="twitter:image" content="https://mobventa.netlify.app/marca/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://bxsldfwlbagvgxxhtfwc.supabase.co">
+<link rel="modulepreload" href="/src/vendor/supabase-js-2.45.4.js">
+<link rel="modulepreload" href="/src/supabase.js">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
+<script defer src="/src/sentry.js"></script>
+<script defer src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" alt="MobVenta — Venta de muebles por cambio de casa"></a>
+  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" width="900" height="450" fetchpriority="high" decoding="async" alt="MobVenta — Venta de muebles por cambio de casa"></a>
   <a href="/" aria-current="page">Catálogo</a>
   <a href="/mis-conversaciones">Mis conversaciones</a>
   <a href="/admin.html">Administración</a>
@@ -44,7 +47,7 @@
 </main>
 
 <script type="module">
-import { sb, clp, esc, cargarCategorias, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, aplicarTitulo } from '/src/supabase.js';
+import { sb, clp, esc, cargarCategorias, ESTADO, estadoHTML, placeholderSVG, fotoUrl, fotoHTML, fail, aplicarTitulo, ajustesSitio } from '/src/supabase.js';
 import { registrar } from '/src/visitas.js';
 
 aplicarTitulo('');
@@ -72,15 +75,16 @@ const orden = { disponible: 0, reservado: 1, vendido: 2 };
 function pintar() {
   const lista = items
     .filter((p) => (cat === 'Todo' || p.category === cat) && (verVendidos || p.status !== 'vendido'))
-    .sort((a, b) => orden[a.status] - orden[b.status] || new Date(b.created_at) - new Date(a.created_at));
+    .sort((a, b) => orden[a.status] - orden[b.status] || b.ts - a.ts);
 
   document.getElementById('vacio').classList.toggle('hide', lista.length > 0);
-  grid.innerHTML = lista.map((p) => {
+  grid.innerHTML = lista.map((p, i) => {
     const foto = fotoUrl(p.cover);
+    const alta = i < 4;   // primeras tarjetas: visibles al cargar, sin lazy y con prioridad
     const n = p.interested_count || 0;
     return `<a class="card ${p.status === 'vendido' ? 'sold' : ''}" href="/p/${p.id}">
       <div class="thumb">
-        ${foto ? fotoHTML(foto, p.title) : placeholderSVG(p.category)}
+        ${foto ? fotoHTML(foto, p.title, true, alta) : placeholderSVG(p.category)}
         <span class="pill" style="position:absolute;bottom:12px;left:12px;z-index:2;white-space:nowrap;background:#fff;color:#141414;box-shadow:0 1px 3px rgba(0,0,0,.15)"><span class="dot" style="background:${ESTADO[p.status].color}"></span>${ESTADO[p.status].label}</span>
         ${p.photo_count > 1 ? `<span class="pill count" style="position:absolute;bottom:12px;right:12px;z-index:2;background:#fff;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.15)">${p.photo_count} fotos</span>` : ''}
       </div>
@@ -94,25 +98,23 @@ function pintar() {
   }).join('');
 }
 
+// Solo las columnas que usa la tarjeta; portada, miniatura y nº de fotos ya vienen de la vista.
+const COLS_TARJETA = 'id,title,category,price_clp,status,created_at,accepts_offers,top_offer_clp,offer_count,interested_count,cover,cover_thumb,photo_count';
+const PAGINA = 200;   // PostgREST corta en 1000 filas; si el catálogo crece, aquí va la paginación
+
 async function cargar() {
   grid.innerHTML = '<p class="spinner">Cargando catálogo…</p>';
-  CATEGORIAS = await cargarCategorias();
+  const [cats, { data, error }, st] = await Promise.all([
+    cargarCategorias(),
+    sb.from('catalog').select(COLS_TARJETA).order('status').order('created_at', { ascending: false }).range(0, PAGINA - 1),
+    ajustesSitio(),
+  ]);
+  CATEGORIAS = cats;
   if (cat !== 'Todo' && !CATEGORIAS.includes(cat)) cat = 'Todo';
   pintarFiltros();
-  const { data, error } = await sb.from('catalog').select('*').order('created_at', { ascending: false });
   if (error) { grid.innerHTML = ''; return fail(error); }
-  const { data: st } = await sb.from('site_settings').select('key,value');
-  const aj = Object.fromEntries((st || []).map((r) => [r.key, r.value === true]));
-  ofertasVisibles = aj.ofertas_publicas ?? true;
-
-  const ids = data.map((p) => p.id);
-  const fotos = ids.length
-    ? (await sb.from('product_photos').select('product_id,storage_path,position').in('product_id', ids).order('position')).data || []
-    : [];
-  items = data.map((p) => {
-    const f = fotos.filter((x) => x.product_id === p.id);
-    return { ...p, cover: f[0]?.storage_path, photo_count: f.length };
-  });
+  ofertasVisibles = Object.fromEntries(st.map((r) => [r.key, r.value === true])).ofertas_publicas ?? true;
+  items = data.map((p) => ({ ...p, ts: Date.parse(p.created_at), cover: p.cover_thumb || p.cover }));
 
   document.getElementById('resumen').textContent =
     `${items.length} ${items.length === 1 ? 'producto' : 'productos'} · ${ofertasVisibles ? 'precio publicado, ofertas abiertas' : 'precio fijo'}, trato directo con quien vende`;
@@ -122,12 +124,14 @@ async function cargar() {
 cargar();
 registrar('catalogo');
 
-sb.channel('catalogo')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, cargar)
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, cargar)
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'offers' }, cargar)
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, () => { cargar(); aplicarTitulo(''); })
-  .subscribe();
+// Sin websocket para visitantes anónimos: cada conexión Realtime cuenta contra el límite del plan
+// (200 simultáneas en el gratuito) y cualquier cambio obligaba a TODOS los visitantes a recargar
+// el catálogo a la vez. Basta con refrescar al volver a la pestaña si pasó más de un minuto.
+let ultimaCarga = Date.now();
+const cargarYMarcar = () => { ultimaCarga = Date.now(); return cargar(); };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - ultimaCarga > 60_000) cargarYMarcar();
+});
 </script>
 </body>
 </html>

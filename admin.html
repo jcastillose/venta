@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-version="18">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,14 +18,17 @@
 <meta name="twitter:image" content="https://mobventa.netlify.app/marca/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://bxsldfwlbagvgxxhtfwc.supabase.co">
+<link rel="modulepreload" href="/src/vendor/supabase-js-2.45.4.js">
+<link rel="modulepreload" href="/src/supabase.js">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
 <link rel="stylesheet" href="/src/app.css?v=17">
-<script src="/src/sentry.js"></script>
-<script src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
+<script defer src="/src/sentry.js"></script>
+<script defer src="https://js-de.sentry-cdn.com/eb8b8ac82e5eef0fc305cb9a2da4a622.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" alt="MobVenta — Venta de muebles por cambio de casa"></a>
+  <a class="brand" href="/" aria-label="MobVenta, ir al catálogo"><img src="/marca/logo.png" width="900" height="450" fetchpriority="high" decoding="async" alt="MobVenta — Venta de muebles por cambio de casa"></a>
   <a href="/">Catálogo</a>
   <span id="nav-tabs" class="hide" style="display:flex;gap:28px"></span>
   <span id="nav-me" class="hide" style="margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted)"></span>
@@ -82,7 +85,7 @@
 
 <script type="module">
 import { sb, SITE_URL, clp, esc, fecha, hora, cargarCategorias, CONDICIONES, condicionLabel, METODOS, ESTADO, ESTADO_INTERES, ESTADO_PAGO,
-         estadoHTML, fotoUrl, fotoHTML, fail, toast, ICON, aplicarTitulo, marca, LOGO_BASE, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
+         estadoHTML, fotoUrl, miniUrl, fotoHTML, fail, toast, ICON, aplicarTitulo, marca, LOGO_BASE, TITULO_BASE, SUPABASE_URL } from '/src/supabase.js';
 
 let tituloActual = TITULO_BASE;
 let marcaActual = { tipo: 'logo', logo: LOGO_BASE, logoPath: '' };
@@ -401,7 +404,11 @@ function vAjustes() {
           <button class="btn btn-secondary" id="logo-subir">${ICON.plus}${marcaActual.logoPath ? 'Cambiar logo' : 'Subir un logo'}</button>
           ${marcaActual.logoPath ? '<button class="btn btn-ghost btn-danger" id="logo-quitar">Volver al logo por defecto</button>' : ''}
           <span class="sub" style="font-size:12.5px;color:var(--muted);flex:1;min-width:220px">PNG con fondo transparente, horizontal, al menos 600 px de ancho.</span>
-        </div>` : ''}
+        </div>
+        ${Object.values(fotosPorProducto).flat().some((f) => !f.thumb_path) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:6px">
+          <button class="btn btn-secondary" id="generar-miniaturas">Generar miniaturas</button>
+          <span class="sub" style="font-size:12.5px;color:var(--muted);flex:1;min-width:220px">${Object.values(fotosPorProducto).flat().filter((f) => !f.thumb_path).length} fotos sin miniatura: el catálogo las carga a tamaño completo. Una sola vez; las fotos nuevas ya la traen.</span>
+        </div>` : ''}` : ''}
       </div>
       ${fila('ofertas_habilitadas', 'Permitir ofertas en todos los productos',
         `Interruptor general: al activarlo o desactivarlo se cambia el estado de ofertas de <strong>todos</strong> los productos publicados y queda como valor por defecto para los nuevos. Después puedes ajustar cada producto por separado desde su ficha o desde la lista. Ahora: ${conOfertas} de ${productos.length} ${productos.length === 1 ? 'producto acepta' : 'productos aceptan'} ofertas.`)}
@@ -486,6 +493,7 @@ function vAjustes() {
     render();
   });
 
+  document.getElementById('generar-miniaturas')?.addEventListener('click', (e) => generarMiniaturas(e.currentTarget));
   document.getElementById('logo-subir')?.addEventListener('click', () => document.getElementById('logo-file').click());
   document.getElementById('logo-file')?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0]; e.target.value = '';
@@ -493,7 +501,7 @@ function vAjustes() {
     const blob = await optimizarLogo(file);
     if (!blob) return toast('No se pudo leer esa imagen; prueba con un PNG o JPG');
     const path = `marca/${crypto.randomUUID()}.png`;
-    const up = await sb.storage.from('fotos').upload(path, blob, { contentType: 'image/png', upsert: false });
+    const up = await sb.storage.from('fotos').upload(path, blob, { contentType: 'image/png', upsert: false, cacheControl: CACHE_FOTO });
     if (up.error) return fail(up.error);
     const anterior = marcaActual.logoPath;
     if (!await guardarAjuste('marca_logo', path)) return;
@@ -572,7 +580,7 @@ function vProductos() {
     <div class="tablewrap"><table>
       <thead><tr><th>Producto</th><th>Precio</th><th>Estado</th><th>Ofertas</th><th>Publicado por</th><th>Interesados</th><th></th></tr></thead>
       <tbody>${productos.map((p) => {
-        const f = fotoUrl(fotos(p.id)[0]?.storage_path);
+        const f = miniUrl(fotos(p.id)[0]);
         return `<tr>
           <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}
             <div class="stack"><strong>${esc(p.title)}${p.is_public === false ? ' <span class="tag-oculto">Oculto</span>' : ''}</strong><span class="sub">${esc(p.category)} · ${fotos(p.id).length} fotos</span></div></div></td>
@@ -624,7 +632,7 @@ function vEditor() {
         <span class="kicker">Fotografías</span>
         ${ctx.id ? `<div class="photos">
           ${fs.map((f, i) => `<div class="photo ${i === 0 ? 'cover' : ''}">
-            ${fotoHTML(fotoUrl(f.storage_path))}
+            ${fotoHTML(miniUrl(f))}
             ${i === 0 ? '<span class="badge">Portada</span>' : ''}
             <div class="tools">
               ${i === 0 ? '' : `<button type="button" data-cover="${f.id}">Usar de portada</button>`}
@@ -725,10 +733,12 @@ function vEditor() {
       const file = await optimizarFoto(original);
       if (!file) { fail(new Error(`${original.name}: formato no compatible con los navegadores (HEIC u otro). Expórtala como JPG y vuelve a subirla.`)); continue; }
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `${ctx.id}/${crypto.randomUUID()}.${ext}`;
-      const up = await sb.storage.from('fotos').upload(path, file, { contentType: file.type, upsert: false });
+      const id = crypto.randomUUID();
+      const path = `${ctx.id}/${id}.${ext}`;
+      const up = await sb.storage.from('fotos').upload(path, file, { contentType: file.type, upsert: false, cacheControl: CACHE_FOTO });
       if (up.error) { fail(up.error); continue; }
-      const ins = await sb.from('product_photos').insert({ product_id: ctx.id, storage_path: path, position: pos++ });
+      const thumb_path = await subirMiniatura(file, `${ctx.id}/${id}-s.jpg`);
+      const ins = await sb.from('product_photos').insert({ product_id: ctx.id, storage_path: path, thumb_path, position: pos++ });
       if (ins.error) fail(ins.error);
     }
     await cargar();
@@ -751,12 +761,14 @@ function vEditor() {
         const original = new File([blob], f.storage_path.split('/').pop(), { type: blob.type || 'image/jpeg' });
         const nueva = await optimizarFoto(original);
         if (!nueva || nueva === original) { omitidas++; continue; }   // ya era liviana o no se pudo leer
-        const path = `${ctx.id}/${crypto.randomUUID()}.jpg`;
-        const up = await sb.storage.from('fotos').upload(path, nueva, { contentType: 'image/jpeg', upsert: false });
+        const id = crypto.randomUUID();
+        const path = `${ctx.id}/${id}.jpg`;
+        const up = await sb.storage.from('fotos').upload(path, nueva, { contentType: 'image/jpeg', upsert: false, cacheControl: CACHE_FOTO });
         if (up.error) throw up.error;
-        const upd = await sb.from('product_photos').update({ storage_path: path }).eq('id', f.id);
+        const thumb_path = await subirMiniatura(nueva, `${ctx.id}/${id}-s.jpg`);
+        const upd = await sb.from('product_photos').update({ storage_path: path, thumb_path }).eq('id', f.id);
         if (upd.error) throw upd.error;
-        await sb.storage.from('fotos').remove([f.storage_path]);
+        await sb.storage.from('fotos').remove([f.storage_path, f.thumb_path].filter(Boolean));
         hechas++;
       } catch (err) { fail(err); omitidas++; }
     }
@@ -787,6 +799,66 @@ function vEditor() {
    orientación EXIF aplicada. Así todas pesan poco (≈200–400 KB) y cargan rápido en el catálogo.
    Devuelve null si el navegador no puede leer el archivo (p. ej. HEIC de iPhone en Chrome). */
 const FOTO_MAX = 1600;
+const MINI_MAX = 640;                    // miniatura para catálogo, listas y fondo desenfocado
+const CACHE_FOTO = '31536000';           // los nombres son UUID: un año de caché en navegador y CDN
+// Miniatura JPEG de ~640 px en el lado mayor. Devuelve null si no se puede leer.
+async function miniaturaFoto(blob) {
+  let bmp;
+  try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch { return null; }
+  try {
+    const k = Math.min(1, MINI_MAX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    return await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
+  } finally { bmp.close(); }
+}
+// Sube la miniatura y devuelve su ruta (o null si falló: la página usará el original).
+async function subirMiniatura(blob, path) {
+  const mini = await miniaturaFoto(blob);
+  if (!mini) return null;
+  const up = await sb.storage.from('fotos').upload(path, mini, { contentType: 'image/jpeg', upsert: true, cacheControl: CACHE_FOTO });
+  return up.error ? null : path;
+}
+// Mantenimiento (Ajustes): miniaturas para las fotos anteriores a esta versión y logo a 640 px.
+async function generarMiniaturas(btn) {
+  const pendientes = Object.values(fotosPorProducto).flat().filter((f) => !f.thumb_path);
+  btn.disabled = true;
+  let hechas = 0, fallidas = 0;
+  for (const f of pendientes) {
+    btn.textContent = `Miniaturas ${hechas + fallidas + 1} / ${pendientes.length}…`;
+    try {
+      const r = await fetch(fotoUrl(f.storage_path), { cache: 'no-store' });
+      if (!r.ok) throw new Error('No se pudo descargar ' + f.storage_path);
+      const thumb_path = await subirMiniatura(await r.blob(), f.storage_path.replace(/\.[a-z0-9]+$/i, '') + '-s.jpg');
+      if (!thumb_path) throw new Error('No se pudo generar la miniatura de ' + f.storage_path);
+      const upd = await sb.from('product_photos').update({ thumb_path }).eq('id', f.id);
+      if (upd.error) throw upd.error;
+      hechas++;
+    } catch (err) { console.warn(err); fallidas++; }
+  }
+  let logo = '';
+  if (marcaActual.logoPath) {
+    try {
+      const r = await fetch(fotoUrl(marcaActual.logoPath), { cache: 'no-store' });
+      const bmp = await createImageBitmap(await r.blob());
+      const ancho = bmp.width; bmp.close();
+      if (ancho > LOGO_MAX) {
+        const blob = await optimizarLogo(new File([await (await fetch(fotoUrl(marcaActual.logoPath), { cache: 'no-store' })).blob()], 'logo.png', { type: 'image/png' }));
+        const path = `marca/${crypto.randomUUID()}.png`;
+        const up = await sb.storage.from('fotos').upload(path, blob, { contentType: 'image/png', upsert: false, cacheControl: CACHE_FOTO });
+        if (!up.error && await guardarAjuste('marca_logo', path)) {
+          await sb.storage.from('fotos').remove([marcaActual.logoPath]).catch(console.warn);
+          await aplicarTitulo('Administración'); marcaActual = window.__marca || marcaActual; refrescarLogoBarra();
+          logo = ` · logo reducido a ${LOGO_MAX} px`;
+        }
+      }
+    } catch (err) { console.warn(err); }
+  }
+  await cargar(); render();
+  toast(`${hechas} ${hechas === 1 ? 'miniatura generada' : 'miniaturas generadas'}${fallidas ? ` · ${fallidas} con error` : ''}${logo}`);
+}
+
 async function optimizarFoto(file) {
   if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(file.name)) return null;
   let bmp;
@@ -831,7 +903,7 @@ function vInteresados() {
     </div>
     <div class="list">${lista.map((i) => {
       const p = prod(i.product_id) || {};
-      const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+      const f = miniUrl(fotos(i.product_id)[0]);
       const y = pago(i.id);
       const of = oferta(i.id);
       const esTop = of && of.amount_clp >= topOferta(i.product_id);
@@ -896,11 +968,12 @@ function refrescarLogoBarra() {
   document.querySelectorAll('.nav .brand img').forEach((i) => { i.src = `${LOGO_BASE}?v=${Date.now()}`; });
 }
 
+const LOGO_MAX = 640;   // la barra lo muestra a 264 px de ancho (528 en pantallas 2x)
 async function optimizarLogo(file) {
   if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name)) return null;
   let bmp;
   try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return null; }
-  const k = Math.min(1, 900 / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, LOGO_MAX / Math.max(bmp.width, bmp.height));
   const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   c.getContext('2d').drawImage(bmp, 0, 0, w, h); bmp.close();
@@ -941,7 +1014,7 @@ async function vChat() {
   const p = prod(i.product_id) || {};
   const y = pago(i.id);
   const { data: ms } = await sb.from('messages').select('*').eq('interest_id', i.id).order('created_at');
-  const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+  const f = miniUrl(fotos(i.product_id)[0]);
   const metodo = y ? (METODOS[y.method] || y.method) : null;
   const ref = y?.reference ? ` · ref. ${esc(y.reference)}` : '';
 
@@ -1081,7 +1154,7 @@ function vCobros() {
       <tbody>${filas.map((i) => {
         const p = prod(i.product_id) || {};
         const y = pago(i.id);
-        const f = fotoUrl(fotos(i.product_id)[0]?.storage_path);
+        const f = miniUrl(fotos(i.product_id)[0]);
         const st = y ? y.status : 'pendiente';
         return `<tr>
           <td><div class="cellflex">${f ? `<img class="mini" src="${f}" alt="">` : '<div class="mini"></div>'}<strong>${esc(p.title || '')}</strong></div></td>
