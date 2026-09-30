@@ -32,3 +32,10 @@ Luego cambiar el import en `src/supabase.js` y los `modulepreload` de las cinco 
 2. Invocaciones de funciones de Netlify (125k/mes): `visita.js` recibe un POST por vista. Siguiente paso: un beacon por sesión y muestreo.
 3. Conexiones Realtime (200): el catálogo ya no las usa.
 4. Peticiones REST del catálogo a 1M visitas: siguiente paso, servirlo como JSON desde una función cacheada en el borde (patrón de `marca.js`).
+
+## Versión por despliegue (`scripts/version.mjs`)
+Netlify lo ejecuta en cada despliegue (`[build] command`). Hace dos cosas, sin modificar el repo:
+1. **Valida** que cada nombre importado por las páginas desde `/src/*.js` exista como `export`. Si falta uno, el despliegue falla y sigue publicada la versión anterior.
+2. **Sella** `?v=<commit>` en las URLs de `app.css`, `supabase.js`, `visitas.js` y `sentry.js`, y en `<html data-version>` (que Sentry usa como versión). Un HTML nuevo siempre pide un JS con URL nueva, así no se empareja con una copia antigua en caché (pasaba en iOS al restaurar una pestaña: `Importing binding name … is not found`).
+
+En local (`netlify dev`) no se ejecuta; las URLs sin versión funcionan igual.

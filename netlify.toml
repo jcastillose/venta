@@ -1,5 +1,7 @@
 [build]
   publish = "."
+  # Valida imports y sella ?v=<commit> en los módulos propios (no toca el repo).
+  command = "node scripts/version.mjs"
 
 [[headers]]
   for = "/*"
