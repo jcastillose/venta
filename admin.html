@@ -96,6 +96,7 @@ let CATEGORIAS = [];
 const view = document.getElementById('view');
 let me = null, vista = 'productos', ctx = {};
 let productos = [], fotosPorProducto = {}, intereses = [], pagos = [], cobroCfg = [], equipo = [], ofertas = [], ajustes = { ofertas_habilitadas: true, ofertas_publicas: true };
+let latidos = [];   // último latido por origen (migración 022); vacío si aún no existe la tabla
 
 /* ── sesión ─────────────────────────────────────────────────────── */
 /* Supabase devuelve los errores del enlace en la URL: #error=access_denied&error_code=otp_expired… */
@@ -314,7 +315,7 @@ function ir(v, c = {}) { vista = v; ctx = c; navegar(); render(); window.scrollT
 
 /* ── datos ──────────────────────────────────────────────────────── */
 async function cargar() {
-  const [p, f, i, y, s, m, o, aj] = await Promise.all([
+  const [p, f, i, y, s, m, o, aj, lt] = await Promise.all([
     sb.from('products').select('*').order('created_at', { ascending: false }),
     sb.from('product_photos').select('*').order('position'),
     sb.from('interests').select('*').order('created_at', { ascending: false }),
@@ -323,7 +324,9 @@ async function cargar() {
     sb.from('members').select('*').order('created_at'),
     sb.from('offers').select('*'),
     sb.from('site_settings').select('*'),
+    sb.from('latidos').select('*').order('origen'),
   ]);
+  latidos = lt.data || [];
   if (p.error) { fail(p.error); }
   // Tablas de migraciones posteriores: si faltan, avisar sin bloquear el panel.
   const faltan = [['offers', o], ['site_settings', aj]].filter(([, r]) => r.error && /does not exist|relation|schema cache/i.test(r.error.message)).map(([n]) => n);
@@ -355,6 +358,32 @@ function render() {
 }
 
 /* ── ajustes ─────────────────────────────────────────────────────── */
+// Latido de la base: dos disparadores externos la mantienen con actividad para que Supabase no la pause
+// (docs/MANTENIMIENTO.md). Aquí solo se muestra cuándo llegó el último de cada uno.
+function haceCuanto(ts) {
+  const min = Math.max(0, Math.round((Date.now() - new Date(ts)) / 60000));
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+}
+function latidoHTML() {
+  const ESPERADO = { netlify: ['Función programada de Netlify', 7], sentry: ['Monitor de Sentry', 2] };   // [nombre, horas máximas entre latidos]
+  const filas = Object.entries(ESPERADO).map(([origen, [nombre, maxH]]) => {
+    const l = latidos.find((x) => x.origen === origen);
+    const atrasado = !l || (Date.now() - new Date(l.ultimo)) > maxH * 3600_000;
+    return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px">
+      <span class="dot" style="background:${atrasado ? 'var(--ambar)' : 'var(--verde)'}"></span>
+      <strong style="font-weight:600">${nombre}</strong>
+      <span class="sub" style="color:var(--muted)">${l ? `${haceCuanto(l.ultimo)} · ${l.total} en total` : 'sin latidos todavía'}</span>
+    </div>`;
+  }).join('');
+  return `<div class="panel" style="margin-top:16px">
+    <div class="stack"><strong style="font-size:15px">Actividad de la base de datos</strong>
+      <span class="sub" style="font-size:13px;color:var(--muted);line-height:1.5">Supabase pausa los proyectos gratuitos sin uso durante una semana. Estos dos avisos automáticos la mantienen activa; si alguno aparece en ámbar por más de un día, revisa <code>docs/MANTENIMIENTO.md</code>.</span></div>
+    <div style="display:grid;gap:8px">${filas}</div>
+  </div>`;
+}
+
 function vAjustes() {
   const admin = me.role === 'admin';
   const conOfertas = productos.filter((p) => p.accepts_offers !== false).length;
@@ -415,6 +444,8 @@ function vAjustes() {
       ${fila('ofertas_publicas', 'Mostrar la oferta más alta en público',
         'Catálogo, detalle y el hilo de cada interesado muestran el monto más alto y cuántas ofertas hay, sin nombres. Desactivado, cada persona solo ve su propia oferta.', !conOfertas)}
     </div>
+
+    ${latidoHTML()}
 
     <section style="padding:44px 0 16px" class="stack">
       <h3>Categorías</h3>

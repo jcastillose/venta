@@ -30,7 +30,9 @@ Ejecutar en el SQL Editor de Supabase, en orden. Todos son re-ejecutables.
 3. `supabase/017-seguridad.sql` — correcciones de la revisión de seguridad.
 4. `supabase/018-avisos-vault.sql` — el secreto de avisos se lee desde Vault (crear antes el secreto `avisos_secret`).
 5. `supabase/019-limites.sql` — topes al marcar interés y una sola reserva por producto.
-6. `supabase/bootstrap-admin.sql` — primera cuenta de administrador; editar correo, nombre y contraseña antes y no subir el archivo con valores reales.
+6. `supabase/020-rendimiento.sql` y `supabase/021-escala.sql` — miniaturas, índices, contadores por trigger, catálogo en una consulta.
+7. `supabase/022-latido.sql` — latido que mantiene activo el proyecto (ver `docs/MANTENIMIENTO.md`).
+8. `supabase/bootstrap-admin.sql` — primera cuenta de administrador; editar correo, nombre y contraseña antes y no subir el archivo con valores reales.
 
 En el dashboard: Authentication → Providers → Email → desactivar *Allow new users to sign up*.
 `schema.sql` y 002…007 se conservan solo como historial; no ejecutarlos sobre una base ya migrada.

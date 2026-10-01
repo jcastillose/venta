@@ -27,6 +27,7 @@ La sesión del panel la inicia Jorge en el navegador integrado (correo + contras
 
 - `src/supabase.js`: cliente, constantes, utilidades. `src/visitas.js`: registro de visitas.
 - `netlify/lib/sentry.js`: `withSentry` y `reportar` para las funciones; `src/sentry.js`: configuración del loader de Sentry en el navegador.
+- Latido (`supabase/022-latido.sql`, `netlify/functions/latido.js` cada 6 h, monitor de Sentry cada hora): mantiene activa la base para que Supabase no la pause; ver `docs/MANTENIMIENTO.md`. `node scripts/version.mjs --check` valida imports en local sin sellar.
 - `scripts/version.mjs`: se ejecuta en cada despliegue; valida imports↔exports entre páginas y `src/*.js` y sella `?v=<commit>` en los módulos propios. No borrar ni quitar el `command` de `netlify.toml`.
 - `netlify/functions/marca.js`: logo oficial en `/marca/logo.png` (Ajustes → marca_logo, o `src/logo.png` por defecto); páginas, correos y og:image apuntan ahí.
 - `netlify/functions/`: `cuentas.js` (cuentas, solo admin), `avisos.js` (correos Resend), `recuperar.js`, `visita.js`.

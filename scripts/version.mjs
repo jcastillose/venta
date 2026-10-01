@@ -36,6 +36,8 @@ if (errores.length) {
   process.exit(1);
 }
 
+if (process.argv.includes('--check')) { console.log('✔ Imports validados (sin sellar).'); process.exit(0); }
+
 const PROPIOS = /(\/src\/(?:app\.css|supabase\.js|visitas\.js|sentry\.js))(\?v=[\w.-]+)?/g;
 for (const pagina of paginas) {
   const html = readFileSync(pagina, 'utf8');
